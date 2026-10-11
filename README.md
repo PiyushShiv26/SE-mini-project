@@ -49,6 +49,54 @@ SE-Mini-Project/
 └── requirements.txt
 ```
 
+## Prerequisites
+
+- Node.js 22 or later
+- npm
+
+## Run locally
+
+### Frontend
+
+```bash
+cd src/frontend
+npm install
+npm run dev
+```
+
+### Backend
+
+In another terminal:
+
+```bash
+cd src/backend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+The backend starts at `http://localhost:3000` by default and exposes `GET /api/health`.
+
+## Checks
+
+Frontend:
+
+```bash
+cd src/frontend
+npm install
+npm run lint
+npm run test
+npm run build
+```
+
+Backend:
+
+```bash
+cd src/backend
+npm install
+npm test
+``` 
+
 ## Repository Contents
 
 - **`.github/workflows/`** — GitHub Actions workflows for automated checks and continuous integration.
