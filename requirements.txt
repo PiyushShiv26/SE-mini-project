@@ -1,0 +1,3 @@
+# This project currently uses Node.js and npm.
+# Node.js dependencies are managed through package.json.
+# Add Python dependencies here only if a Python component is introduced.
