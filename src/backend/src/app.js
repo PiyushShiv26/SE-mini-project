@@ -56,7 +56,7 @@ app.patch('/api/me', auth, asyncRoute(async (req, res) => {
 
 app.get('/api/rides', asyncRoute(async (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase(), date = req.query.date || null, seats = Math.max(1, Number(req.query.seats) || 1)
-  const { rows } = await pool.query(`SELECT r.*,u.name AS driver_name,COALESCE((SELECT avg(stars)::numeric(3,1) FROM ratings WHERE ratee_id=u.id),0) AS driver_rating FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='OPEN' AND r.departure_at > now() AND r.available_seats >= $1 AND ($2::text IS NULL OR (lower(r.pickup) LIKE '%'||$2||'%' AND lower(r.destination) LIKE '%'||$2||'%')) AND ($3::date IS NULL OR r.departure_at::date=$3::date) ORDER BY r.departure_at LIMIT 100`, [seats, q || null, date])
+  const { rows } = await pool.query(`SELECT r.*,u.name AS driver_name,COALESCE((SELECT avg(stars)::numeric(3,1) FROM ratings WHERE ratee_id=u.id),0) AS driver_rating FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='OPEN' AND r.departure_at > now() AND r.available_seats >= $1 AND ($2::text IS NULL OR (lower(r.pickup) LIKE '%'||$2||'%' OR lower(r.destination) LIKE '%'||$2||'%')) AND ($3::date IS NULL OR r.departure_at::date=$3::date) ORDER BY r.departure_at LIMIT 100`, [seats, q || null, date])
   res.json({ rides: rows.map(r => ({ ...r, matchReason: q ? 'Location text matches your search' : 'Upcoming ride with seats available' })) })
 }))
 app.post('/api/rides', auth, asyncRoute(async (req, res) => {
