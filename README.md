@@ -2,6 +2,20 @@
 
 Campusride helps university students share rides by matching normalized pickup and destination text, departure date, and seat availability. Students can be both drivers and passengers. This repository contains the existing project shell extended into a PostgreSQL-backed React and Express MVP.
 
+## Coursework Documentation
+
+The project documentation for **Team 12** is available in [`src/docs/`](src/docs/).
+
+- **Software Requirements Specification (SRS):** Requirements, scope, and acceptance criteria.
+- **Software Architecture and Design (SAD):** System architecture, design diagrams, data model, and API design.
+- **Software Test Plan (STP):** Test cases, testing strategy, and verification criteria.
+
+These documents are part of the Software Engineering mini-project submission.
+
+## Licensing
+
+The root MIT license is preserved.
+
 ## Features
 
 - Password-hashed registration and login with PostgreSQL-backed, HTTP-only session cookies.
