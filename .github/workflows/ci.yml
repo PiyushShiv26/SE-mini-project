@@ -9,6 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: campus_rides_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d campus_rides_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - name: Checkout repository
@@ -41,4 +55,8 @@ jobs:
 
       - name: Test backend
         working-directory: src/backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL_TEST: postgresql://postgres:test-password@localhost:5432/campus_rides_test
+          SESSION_SECRET: ci-test-session-secret-at-least-32-characters
         run: npm test
