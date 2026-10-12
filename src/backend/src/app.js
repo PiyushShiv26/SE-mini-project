@@ -7,7 +7,9 @@ import pgSession from 'connect-pg-simple'
 import bcrypt from 'bcryptjs'
 import { Pool } from 'pg'
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const databaseUrl = process.env.NODE_ENV === 'test' ? process.env.DATABASE_URL_TEST : process.env.DATABASE_URL
+if (process.env.NODE_ENV === 'test' && !databaseUrl) throw new Error('DATABASE_URL_TEST must be configured for test runs.')
+export const pool = new Pool({ connectionString: databaseUrl })
 const app = express()
 const PgStore = pgSession(session)
 app.use(helmet())
@@ -76,8 +78,8 @@ app.get('/api/dashboard', auth, asyncRoute(async (req,res) => {
   ]); res.json({offered:offered.rows,bookings:bookings.rows,requests:activity.rows})
 }))
 app.post('/api/rides/:id/bookings', auth, asyncRoute(async (req,res) => {
-  const rideId=Number(req.params.id), count=Math.max(1,Number(req.body.seats)||1)
-  if (!Number.isInteger(rideId)||!Number.isInteger(count)||count>8) throw fail(400,'VALIDATION_ERROR','Invalid ride or seat count.')
+  const rideId=Number(req.params.id), count=Number(req.body.seats)
+  if (!Number.isInteger(rideId)||!Number.isInteger(count)||count<1||count>8) throw fail(400,'VALIDATION_ERROR','Invalid ride or seat count.')
   try { const {rows:[booking]}=await pool.query(`INSERT INTO bookings(ride_id,passenger_id,seats) SELECT id,$2,$3 FROM rides WHERE id=$1 AND driver_id<>$2 AND status='OPEN' AND departure_at>now() AND available_seats >= $3 AND NOT EXISTS(SELECT 1 FROM bookings WHERE ride_id=$1 AND passenger_id=$2 AND status IN ('PENDING','ACCEPTED')) RETURNING *`,[rideId,req.session.user.id,count]); if(!booking) throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.'); res.status(201).json({booking}) } catch(e){ if(e.status) throw e; throw e }
 }))
 app.patch('/api/bookings/:id', auth, asyncRoute(async (req,res) => {
