@@ -163,8 +163,8 @@ if (!databaseUrl) {
         body: JSON.stringify({ seats: 1 }),
       }, driver.cookie)
       assert.equal(ownRide.response.status, 409)
-      const nonOwner = await request(`/api/rides/${ride.id}/bookings`, {
-        method: 'POST',
+      const nonOwner = await request(`/api/bookings/${booking.body.booking.id}`, {
+        method: 'PATCH',
         body: JSON.stringify({ status: 'ACCEPTED' }),
       }, passenger.cookie)
       assert.equal(nonOwner.response.status, 403)
