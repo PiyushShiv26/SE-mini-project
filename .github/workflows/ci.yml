@@ -19,18 +19,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Check frontend
-        run: |
-          if [ -f frontend/package.json ]; then
-            cd frontend
-            npm ci
-            npm test --if-present
-          fi
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: npm ci
 
-      - name: Check backend
-        run: |
-          if [ -f backend/package.json ]; then
-            cd backend
-            npm ci
-            npm test --if-present
-          fi
+      - name: Lint frontend
+        working-directory: src/frontend
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: src/frontend
+        run: npm test
+
+      - name: Build frontend
+        working-directory: src/frontend
+        run: npm run build
+
+      - name: Install backend dependencies
+        working-directory: src/backend
+        run: npm ci
+
+      - name: Test backend
+        working-directory: src/backend
+        run: npm test
