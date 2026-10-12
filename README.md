@@ -26,7 +26,8 @@ src/frontend/       React application
 src/backend/        Express API and tests
 src/db/schema.sql   PostgreSQL schema
 src/docs/           Coursework documentation (preserved)
-tests/              Existing repository tests
+tests/backend/      Node.js API/integration tests and repository test
+tests/frontend/     Vitest/React Testing Library tests and setup
 ```
 
 ## Requirements
@@ -82,14 +83,21 @@ Seats are not reserved while a request is pending. The driver’s acceptance run
 ## Commands
 
 ```bash
-# Frontend
+# Frontend tests, lint, and production build
 cd src/frontend && npm run lint && npm test && npm run build
 
-# Backend
+# Backend API tests (integration suite is skipped without DATABASE_URL_TEST)
 cd src/backend && npm test
+
+# The integration tests require a dedicated database and never fall back to DATABASE_URL.
+DATABASE_URL_TEST=postgresql://postgres:test-password@localhost:5432/campus_rides_test \
+NODE_ENV=test SESSION_SECRET=test-only-session-secret-at-least-32-characters \
+npm test
 ```
 
-The backend tests cover health routing and authentication guards without database writes. Full booking concurrency tests require an isolated PostgreSQL test database; never point test commands at production data.
+Without `DATABASE_URL_TEST`, the database integration file is reported as skipped and the health/guard tests remain runnable. For local integration testing, start a separate PostgreSQL database (for example `campus_rides_test`) and set `DATABASE_URL_TEST`; never point it at development or production data. CI provisions this database as an ephemeral PostgreSQL service. The integration suite creates the schema, cleans its rows before and after each run, and includes a real concurrent final-seat acceptance test.
+
+All test source files are kept under [`tests/`](tests/). Backend tests are in [`tests/backend/`](tests/backend/) and frontend tests are in [`tests/frontend/`](tests/frontend/). The package scripts run those relocated files while application source remains under `src/`.
 
 ## API
 

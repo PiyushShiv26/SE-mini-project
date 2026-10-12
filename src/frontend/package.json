@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
+    "lint": "cd ../.. && eslint --config src/frontend/eslint.config.js src/frontend tests/frontend",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.js"
   },
   "dependencies": {
     "react": "^19.1.0",
