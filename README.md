@@ -1,137 +1,109 @@
+# Campusride — Team 12, PES University
 
-# SE Mini Project — Team 12
+Campusride helps university students share rides by matching normalized pickup and destination text, departure date, and seat availability. Students can be both drivers and passengers. This repository contains the existing project shell extended into a PostgreSQL-backed React and Express MVP.
 
-## Campus Ride-Share Matching System
+## Features
 
-A Software Engineering mini-project developed at PES University to connect students offering rides with students requesting rides. The system matches students based on pickup and drop-off locations, routes, departure times, and available seats.
+- Password-hashed registration and login with PostgreSQL-backed, HTTP-only session cookies.
+- Student profile editing and logout.
+- Publish, browse, filter, and cancel future rides.
+- Request seats; driver accept/reject; passenger/driver cancellation; accepted seats are reserved and released consistently.
+- Driver dashboard with pending booking requests and ride history.
+- Participant-only polling chat and completed-ride ratings.
+- OpenAPI JSON at `/api/openapi.json` and health check at `/api/health`.
 
-## Team Members
+The initial matcher is deliberately transparent: case-insensitive substring search on pickup and destination, optional departure date, and minimum seats. It does not calculate distance, route overlap, or GPS position. There are no payments or map services. Password changes are deferred; message and rating APIs enforce ride participation and completion rules.
 
-| Name | SRN |
-|---|---|
-| Pratham S Reddy | PES1UG24AM200 |
-| Piyush Shiv | PES1UG24AM191 |
-| Pravith Mohandas | PES1UG24AM202 |
-| Ramneek Gautam | PES1UG24AM220 |
+## Stack and layout
 
-## Project Objectives
-
-- Allow students to offer and search for rides.
-- Match ride providers and passengers based on route and timing compatibility.
-- Manage ride requests, booking status, and seat availability.
-- Support communication between ride participants.
-- Maintain ride history and ratings.
-
-## Planned Technology Stack
-
-- **Frontend:** React
-- **Backend:** Node.js and Express
-- **Database:** PostgreSQL
-- **Version Control:** Git and GitHub
-- **Continuous Integration:** GitHub Actions
-
-The technology stack and implementation details will be finalised as development progresses.
-
-## Repository Structure
+- Frontend: React, Vite, JavaScript, Vitest, React Testing Library
+- Backend: Node.js 22+, Express, PostgreSQL via `pg`, bcryptjs, Express sessions
+- CI: GitHub Actions
 
 ```text
-SE-Mini-Project/
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── src/
-│   └── Application source code
-├── tests/
-│   └── Test cases and automated tests
-├── .gitignore
-├── LICENSE
-├── README.md
-└── requirements.txt
+.github/workflows/ci.yml
+src/frontend/       React application
+src/backend/        Express API and tests
+src/db/schema.sql   PostgreSQL schema
+src/docs/           Coursework documentation (preserved)
+tests/              Existing repository tests
 ```
 
-## Prerequisites
+## Requirements
 
-- Node.js 22 or later
-- npm
+- Node.js 22+ and npm
+- Docker Desktop (recommended for local PostgreSQL), or PostgreSQL 14+ installed locally
 
-## Run locally
+## Local setup
 
-### Frontend
+1. Choose one way to run PostgreSQL:
+
+   - **Docker Desktop:** from the project root, run:
+
+     ```powershell
+     docker compose up -d db
+     ```
+
+     The development database is bound to localhost and uses `postgres` / `local-campusride`.
+
+   - **PostgreSQL installed on Windows:** make sure its Windows service is running. In pgAdmin, create a database named exactly `campus_rides`. Note the `postgres` password you chose during installation.
+
+2. In `src/backend`, copy `.env.example` to `.env`. Set `DATABASE_URL` to your actual PostgreSQL password, for example `postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/campus_rides`. For the Docker option, use `postgresql://postgres:local-campusride@localhost:5432/campus_rides`. Replace `SESSION_SECRET` with a random secret of at least 32 characters. Keep `.env` private.
+3. In a PowerShell terminal opened in `src/backend`, install dependencies, create the schema, seed the demo user, and start the backend:
+
+   ```powershell
+   cd src\backend
+   Copy-Item .env.example .env
+   # Edit .env now and set DATABASE_URL and SESSION_SECRET as described above.
+   npm ci
+   npm run db:migrate
+   npm run db:seed
+   npm run dev
+   ```
+
+4. In another PowerShell terminal opened at the project root, install and start the frontend:
+
+   ```powershell
+   cd src\frontend
+   npm ci
+   npm run dev
+   ```
+
+Open the Vite URL (normally `http://localhost:5173`). Vite proxies `/api` to port 3000. For production, set `FRONTEND_ORIGIN` to the exact frontend origin, use HTTPS, and set `NODE_ENV=production` so session cookies are secure.
+
+The seed creates `asha.demo@campus.example` with password `campus-demo-2026` and one sample ride. Do not use that account or password outside local development. Stop the local database with `docker compose down`; its data persists in a named volume.
+
+## Database and booking rules
+
+`users` own rides and bookings. A ride has one driver and many bookings/messages. A booking belongs to one passenger and one ride; a partial unique index prevents multiple pending or accepted requests by the same passenger for a ride. Ratings are unique per ride/rater/ratee.
+
+Seats are not reserved while a request is pending. The driver’s acceptance runs in a PostgreSQL transaction, locks the booking and ride rows, verifies remaining capacity, decrements available seats, and accepts the booking. An accepted booking cancellation releases seats. Rejected requests never consume seats. Ride cancellation changes open rides to cancelled and cancels pending/accepted bookings. The database check constraint prevents available seats exceeding total capacity.
+
+## Commands
 
 ```bash
-cd src/frontend
-npm install
-npm run dev
+# Frontend
+cd src/frontend && npm run lint && npm test && npm run build
+
+# Backend
+cd src/backend && npm test
 ```
 
-### Backend
+The backend tests cover health routing and authentication guards without database writes. Full booking concurrency tests require an isolated PostgreSQL test database; never point test commands at production data.
 
-In another terminal:
+## API
 
-```bash
-cd src/backend
-npm install
-cp .env.example .env
-npm run dev
-```
+All routes are under `/api`. OpenAPI JSON is served at `/api/openapi.json`.
 
-The backend starts at `http://localhost:3000` by default and exposes `GET /api/health`.
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET/PATCH /me`
+- `GET/POST /rides`, `GET /rides/mine`, `GET /dashboard`, `GET /history`
+- `POST /rides/:id/bookings`, `GET /rides/:id/bookings`, `PATCH /bookings/:id`
+- `PATCH /rides/:id/cancel`
+- `GET/POST /rides/:id/messages`
+- `POST /ratings`
 
-## Checks
+Session cookies are HTTP-only, SameSite=Lax, and Secure in production. CORS is restricted to `FRONTEND_ORIGIN`, auth is rate limited, Helmet sets security headers, and SQL uses bound parameters. This small MVP does not implement CSRF tokens; deploy same-site frontend/API origins only and review CSRF protections before using cross-site cookie configurations. Logs do not include request bodies.
 
-Frontend:
+## Coursework and licensing
 
-```bash
-cd src/frontend
-npm install
-npm run lint
-npm run test
-npm run build
-```
-
-Backend:
-
-```bash
-cd src/backend
-npm install
-npm test
-``` 
-
-## Repository Contents
-
-- **`.github/workflows/`** — GitHub Actions workflows for automated checks and continuous integration.
-- **`src/`** — Application source code.
-- **`tests/`** — Test cases and automated tests.
-- **`.gitignore`** — Files and directories excluded from version control.
-- **`LICENSE`** — Project licensing information.
-- **`README.md`** — Project overview and setup instructions.
-- **`requirements.txt`** — Python dependencies, if Python components are used.
-
-The source and test directories will be populated as implementation begins.
-
-## Development Workflow
-
-The `main` branch is intended to contain reviewed and stable code.
-
-1. Pull the latest changes from `main`.
-2. Create a separate branch for each feature or change.
-3. Implement the change and add relevant tests.
-4. Commit and push the branch to GitHub.
-5. Open a pull request targeting `main`.
-6. Ensure required GitHub Actions checks pass.
-7. Obtain at least one teammate's approval.
-8. Merge the pull request after all required conditions are satisfied.
-
-## Project Documentation
-
-The project documentation will cover:
-
-- Software Requirements Specification (SRS)
-- Software Architecture and Design Specification (SAD)
-- Software Test Plan (STP)
-
-These documents will be maintained alongside the implementation as the project develops.
-
-## Academic Context
-
-Developed as part of the Software Engineering mini-project at PES University.
+`src/docs/` currently contains the project documentation README only; no submitted SRS, SAD, or STP documents were present to modify. The root MIT license is preserved.
