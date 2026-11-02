@@ -1,131 +1,380 @@
 # Campusride — Team 12, PES University
 
-Campusride helps university students share rides by matching normalized pickup and destination text, departure date, and seat availability. Students can be both drivers and passengers. This repository contains the existing project shell extended into a PostgreSQL-backed React and Express MVP.
+Campusride is a campus ride-sharing application that helps university students share rides by matching pickup and destination locations, departure dates, and seat availability. Students can participate as both drivers and passengers.
+
+The project is built as a PostgreSQL-backed web application with a React frontend and Express backend.
 
 ## Coursework Documentation
 
-The project documentation for **Team 12** is available in [`src/docs/`](src/docs/).
+The Software Engineering mini-project documentation for Team 12 is available in [`src/docs/`](src/docs/).
 
-- **Software Requirements Specification (SRS):** Requirements, scope, and acceptance criteria.
+- **Software Requirements Specification (SRS):** Requirements, project scope, and acceptance criteria.
 - **Software Architecture and Design (SAD):** System architecture, design diagrams, data model, and API design.
-- **Software Test Plan (STP):** Test cases, testing strategy, and verification criteria.
+- **Software Test Plan (STP):** Testing strategy, test cases, and verification criteria.
 
-These documents are part of the Software Engineering mini-project submission.
-
-## Licensing
-
-The root MIT license is preserved.
+These documents form part of the Software Engineering mini-project submission.
 
 ## Features
 
-- Password-hashed registration and login with PostgreSQL-backed, HTTP-only session cookies.
+- Student registration and login with password hashing and PostgreSQL-backed HTTP-only session cookies.
 - Student profile editing and logout.
-- Publish, browse, filter, and cancel future rides.
-- Request seats; driver accept/reject; passenger/driver cancellation; accepted seats are reserved and released consistently.
+- Ride creation, browsing, filtering, and cancellation.
+- Booking requests with driver accept/reject functionality.
+- Passenger and driver booking cancellation.
+- Seat reservation and restoration through transactional database operations.
 - Driver dashboard with pending booking requests and ride history.
-- Participant-only polling chat and completed-ride ratings.
-- OpenAPI JSON at `/api/openapi.json` and health check at `/api/health`.
+- Participant-only polling-based messaging.
+- Ratings for completed rides.
+- OpenAPI documentation available at `/api/openapi.json`.
+- Health check available at `/api/health`.
 
-The initial matcher is deliberately transparent: case-insensitive substring search on pickup and destination, optional departure date, and minimum seats. It does not calculate distance, route overlap, or GPS position. There are no payments or map services. Password changes are deferred; message and rating APIs enforce ride participation and completion rules.
+### Matching and Scope
 
-## Stack and layout
+The initial ride matcher uses case-insensitive substring matching on pickup and destination text, with optional departure-date and minimum-seat filters.
 
-- Frontend: React, Vite, JavaScript, Vitest, React Testing Library
-- Backend: Node.js 22+, Express, PostgreSQL via `pg`, bcryptjs, Express sessions
-- CI: GitHub Actions
+It does not calculate geographical distance, route overlap, or GPS position.
+
+Payments and map-based services are outside the current project scope. Password changes are deferred. Message and rating APIs enforce ride participation and ride-completion rules.
+
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| Frontend | React, Vite, JavaScript |
+| Frontend testing | Vitest, React Testing Library |
+| Backend | Node.js 22+, Express |
+| Database | PostgreSQL 16 |
+| Database connectivity | Node.js `pg` |
+| Authentication | Express sessions, bcryptjs |
+| CI | GitHub Actions |
+
+## Project Structure
 
 ```text
-.github/workflows/ci.yml
-src/frontend/       React application
-src/backend/        Express API and tests
-src/db/schema.sql   PostgreSQL schema
-src/docs/           Coursework documentation (preserved)
-tests/backend/      Node.js API/integration tests and repository test
-tests/frontend/     Vitest/React Testing Library tests and setup
+SE-mini-project/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── src/
+│   ├── frontend/       React + Vite application
+│   ├── backend/        Express API
+│   ├── db/             PostgreSQL schema
+│   └── docs/           Coursework documentation
+├── tests/
+│   ├── backend/        API and integration tests
+│   └── frontend/       Vitest and React Testing Library tests
+├── compose.yaml        Local PostgreSQL configuration
+├── README.md
+└── LICENSE
 ```
 
 ## Requirements
 
-- Node.js 22+ and npm
-- Docker Desktop (recommended for local PostgreSQL), or PostgreSQL 14+ installed locally
+Install the following before setting up the project:
 
-## Local setup
+- Node.js 22 or later
+- npm
+- Docker Desktop with Docker Compose
 
-1. Choose one way to run PostgreSQL:
+Alternatively, PostgreSQL 14 or later can be installed and configured locally instead of using Docker.
 
-   - **Docker Desktop:** from the project root, run:
+## Local Setup
 
-     ```powershell
-     docker compose up -d db
-     ```
+The following instructions are for macOS and Linux.
 
-     The development database is bound to localhost and uses `postgres` / `local-campusride`.
-
-   - **PostgreSQL installed on Windows:** make sure its Windows service is running. In pgAdmin, create a database named exactly `campus_rides`. Note the `postgres` password you chose during installation.
-
-2. In `src/backend`, copy `.env.example` to `.env`. Set `DATABASE_URL` to your actual PostgreSQL password, for example `postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/campus_rides`. For the Docker option, use `postgresql://postgres:local-campusride@localhost:5432/campus_rides`. Replace `SESSION_SECRET` with a random secret of at least 32 characters. Keep `.env` private.
-3. In a PowerShell terminal opened in `src/backend`, install dependencies, create the schema, seed the demo user, and start the backend:
-
-   ```powershell
-   cd src\backend
-   Copy-Item .env.example .env
-   # Edit .env now and set DATABASE_URL and SESSION_SECRET as described above.
-   npm ci
-   npm run db:migrate
-   npm run db:seed
-   npm run dev
-   ```
-
-4. In another PowerShell terminal opened at the project root, install and start the frontend:
-
-   ```powershell
-   cd src\frontend
-   npm ci
-   npm run dev
-   ```
-
-Open the Vite URL (normally `http://localhost:5173`). Vite proxies `/api` to port 3000. For production, set `FRONTEND_ORIGIN` to the exact frontend origin, use HTTPS, and set `NODE_ENV=production` so session cookies are secure.
-
-The seed creates `asha.demo@campus.example` with password `campus-demo-2026` and one sample ride. Do not use that account or password outside local development. Stop the local database with `docker compose down`; its data persists in a named volume.
-
-## Database and booking rules
-
-`users` own rides and bookings. A ride has one driver and many bookings/messages. A booking belongs to one passenger and one ride; a partial unique index prevents multiple pending or accepted requests by the same passenger for a ride. Ratings are unique per ride/rater/ratee.
-
-Seats are not reserved while a request is pending. The driver’s acceptance runs in a PostgreSQL transaction, locks the booking and ride rows, verifies remaining capacity, decrements available seats, and accepts the booking. An accepted booking cancellation releases seats. Rejected requests never consume seats. Ride cancellation changes open rides to cancelled and cancels pending/accepted bookings. The database check constraint prevents available seats exceeding total capacity.
-
-## Commands
+### 1. Clone the Repository
 
 ```bash
-# Frontend tests, lint, and production build
-cd src/frontend && npm run lint && npm test && npm run build
+git clone https://github.com/PiyushShiv26/SE-mini-project.git
 
-# Backend API tests (integration suite is skipped without DATABASE_URL_TEST)
-cd src/backend && npm test
+cd SE-mini-project
+```
 
-# The integration tests require a dedicated database and never fall back to DATABASE_URL.
-DATABASE_URL_TEST=postgresql://postgres:test-password@localhost:5432/campus_rides_test \
-NODE_ENV=test SESSION_SECRET=test-only-session-secret-at-least-32-characters \
+### 2. Start PostgreSQL
+
+From the project root, run:
+
+```bash
+docker compose up -d db
+```
+
+This starts a local PostgreSQL 16 database.
+
+The default development database configuration is:
+
+| Setting | Value |
+|---|---|
+| Database | `campus_rides` |
+| Username | `postgres` |
+| Password | `local-campusride` |
+| Host | `localhost` |
+| Port | `5432` |
+
+The database is bound to localhost and uses a persistent Docker volume.
+
+### 3. Configure the Backend
+
+Navigate to the backend directory:
+
+```bash
+cd src/backend
+```
+
+Create the environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and configure the required environment variables.
+
+For the default Docker database, the database URL is:
+
+```env
+DATABASE_URL=postgresql://postgres:local-campusride@localhost:5432/campus_rides
+```
+
+Set `SESSION_SECRET` to a random secret containing at least 32 characters.
+
+Keep `.env` private. Never commit credentials or secrets to GitHub.
+
+### 4. Install Backend Dependencies and Initialise the Database
+
+From `src/backend`, run:
+
+```bash
+npm ci
+npm run db:migrate
+npm run db:seed
+```
+
+Start the backend development server:
+
+```bash
+npm run dev
+```
+
+### 5. Configure and Start the Frontend
+
+Open another terminal from the project root:
+
+```bash
+cd src/frontend
+```
+
+Install dependencies:
+
+```bash
+npm ci
+```
+
+Start the frontend development server:
+
+```bash
+npm run dev
+```
+
+### 6. Open the Application
+
+Open the Vite development URL:
+
+```text
+http://localhost:5173
+```
+
+The frontend proxies `/api` requests to the backend running on port `3000`.
+
+### Demo Account
+
+The database seed creates a demo account:
+
+| Field | Value |
+|---|---|
+| Email | `asha.demo@campus.example` |
+| Password | `campus-demo-2026` |
+
+The seed also creates a sample ride.
+
+These credentials are intended exclusively for local development and demonstration. Do not reuse them in production.
+
+### Stopping the Database
+
+From the project root:
+
+```bash
+docker compose down
+```
+
+The database data persists in the named Docker volume. To remove the volume and its data as well, use:
+
+```bash
+docker compose down -v
+```
+
+**Warning:** The second command permanently deletes the local database volume.
+
+## Database and Booking Rules
+
+The application uses PostgreSQL for persistent storage.
+
+- Users own rides and bookings.
+- Each ride has one driver and can have multiple bookings and messages.
+- Each booking belongs to one passenger and one ride.
+- A partial unique index prevents the same passenger from having multiple pending or accepted requests for the same ride.
+- Ratings are unique per ride, rater, and ratee.
+
+### Seat Availability
+
+The booking system follows these rules:
+
+1. Pending booking requests do not reserve seats.
+2. When a driver accepts a booking, the application uses a PostgreSQL transaction.
+3. The transaction locks the relevant booking and ride rows.
+4. Remaining seat availability is checked before acceptance.
+5. Available seats are decremented when a booking is accepted.
+6. Cancelling an accepted booking releases the reserved seats.
+7. Rejected bookings do not consume seats.
+8. Cancelling a ride also cancels its pending and accepted bookings.
+
+Database constraints prevent available seats from exceeding the ride's total capacity.
+
+## Testing
+
+The project includes frontend and backend automated tests.
+
+### Frontend Tests
+
+From the project root:
+
+```bash
+cd src/frontend
+
+npm run lint
+npm test
+npm run build
+```
+
+These commands run linting, frontend tests, and the production build.
+
+### Backend Tests
+
+From the project root:
+
+```bash
+cd src/backend
+
 npm test
 ```
 
-Without `DATABASE_URL_TEST`, the database integration file is reported as skipped and the health/guard tests remain runnable. For local integration testing, start a separate PostgreSQL database (for example `campus_rides_test`) and set `DATABASE_URL_TEST`; never point it at development or production data. CI provisions this database as an ephemeral PostgreSQL service. The integration suite creates the schema, cleans its rows before and after each run, and includes a real concurrent final-seat acceptance test.
+The backend test suite includes API and database integration tests.
 
-All test source files are kept under [`tests/`](tests/). Backend tests are in [`tests/backend/`](tests/backend/) and frontend tests are in [`tests/frontend/`](tests/frontend/). The package scripts run those relocated files while application source remains under `src/`.
+**Important:** Database integration tests are skipped when `DATABASE_URL_TEST` is not configured. Health and guard tests remain runnable without the test database.
 
-## API
+### Running Backend Integration Tests
 
-All routes are under `/api`. OpenAPI JSON is served at `/api/openapi.json`.
+Integration tests require a dedicated PostgreSQL test database. They must never use the development or production database.
 
-- `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET/PATCH /me`
-- `GET/POST /rides`, `GET /rides/mine`, `GET /dashboard`, `GET /history`
-- `POST /rides/:id/bookings`, `GET /rides/:id/bookings`, `PATCH /bookings/:id`
-- `PATCH /rides/:id/cancel`
-- `GET/POST /rides/:id/messages`
-- `POST /ratings`
+Create a separate database named `campus_rides_test` and configure:
 
-Session cookies are HTTP-only, SameSite=Lax, and Secure in production. CORS is restricted to `FRONTEND_ORIGIN`, auth is rate limited, Helmet sets security headers, and SQL uses bound parameters. This small MVP does not implement CSRF tokens; deploy same-site frontend/API origins only and review CSRF protections before using cross-site cookie configurations. Logs do not include request bodies.
+```bash
+DATABASE_URL_TEST=postgresql://postgres:test-password@localhost:5432/campus_rides_test \
+NODE_ENV=test \
+SESSION_SECRET=test-only-session-secret-at-least-32-characters \
+npm test
+```
 
-## Coursework and licensing
+Run this command from `src/backend`.
 
-`src/docs/` currently contains the project documentation README only; no submitted SRS, SAD, or STP documents were present to modify. The root MIT license is preserved.
+The integration suite creates the required schema and cleans its test data before and after each run.
+
+It also includes a concurrent final-seat booking acceptance test.
+
+GitHub Actions provisions an ephemeral PostgreSQL service for automated integration testing.
+
+### Test Directory
+
+All test source files are maintained under [`tests/`](tests/).
+
+- [`tests/backend/`](tests/backend/) — Backend API and integration tests.
+- [`tests/frontend/`](tests/frontend/) — Frontend unit and component tests.
+
+The application source remains under `src/`, while the package scripts execute the relocated test files.
+
+## API Overview
+
+All backend API routes are prefixed with `/api`.
+
+OpenAPI documentation is available at:
+
+```text
+/api/openapi.json
+```
+
+Health check:
+
+```text
+/api/health
+```
+
+### Authentication and Profiles
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/register` | Register a student |
+| POST | `/auth/login` | Log in |
+| POST | `/auth/logout` | Log out |
+| GET | `/me` | Retrieve current profile |
+| PATCH | `/me` | Update profile |
+
+### Rides and Bookings
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/rides` | Browse rides |
+| POST | `/rides` | Create a ride |
+| GET | `/rides/mine` | Retrieve own rides |
+| GET | `/dashboard` | Retrieve dashboard data |
+| GET | `/history` | Retrieve ride history |
+| POST | `/rides/:id/bookings` | Request a booking |
+| GET | `/rides/:id/bookings` | Retrieve ride bookings |
+| PATCH | `/bookings/:id` | Update a booking |
+| PATCH | `/rides/:id/cancel` | Cancel a ride |
+
+### Messaging and Ratings
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/rides/:id/messages` | Retrieve ride messages |
+| POST | `/rides/:id/messages` | Send a ride message |
+| POST | `/ratings` | Submit a ride rating |
+
+## Security Considerations
+
+The application includes:
+
+- HTTP-only session cookies.
+- SameSite=Lax cookie configuration.
+- Secure cookies in production.
+- CORS restricted to the configured `FRONTEND_ORIGIN`.
+- Rate limiting for authentication routes.
+- Helmet security headers.
+- Parameterised SQL queries.
+- Request-body exclusion from application logs.
+
+The current MVP does not implement CSRF tokens. Use same-site frontend and backend origins and review CSRF protections before configuring cross-site cookie deployments.
+
+For production deployments, configure HTTPS, set `NODE_ENV=production`, and provide a secure session secret and the correct frontend origin.
+
+## GitHub Actions
+
+The repository uses GitHub Actions for automated checks.
+
+The CI workflow runs project checks and provisions PostgreSQL for backend integration testing.
+
+Pull requests should be reviewed and validated before being merged into `main`.
+
+## Coursework and Licensing
+
+The SRS, SAD, and STP documents are maintained under [`src/docs/`](src/docs/).
+
+The repository is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
