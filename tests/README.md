@@ -1,34 +1,65 @@
-# Test organization
+# Automated test suite
 
-All project test sources live under this directory:
+## Test inventory
 
-- `tests/backend/` contains Node.js `node:test` API tests and the existing Python repository smoke test.
-- `tests/frontend/` contains Vitest and React Testing Library component tests plus their test-only setup module.
+- `tests/frontend/App.test.jsx` — public landing/authentication screens, registration password confirmation, browser back/forward navigation, and ride creation request payload.
+- `tests/backend/health.test.js` — HTTP health response and protected-route authentication guards. These run without database writes.
+- `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login/profile, input validation, authorization, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
 
-## Run the tests
+No test is marked skipped. The database integration command fails before executing tests if its test database URL is missing or does not name a database ending in `_test`.
 
-From the repository root:
+## Frontend checks
 
-```bash
-cd src/frontend
+From the repository root, in PowerShell:
+
+```powershell
+cd src\frontend
 npm ci
 npm run lint
 npm test
 npm run build
+```
 
-cd ../backend
+## Backend unit/HTTP tests
+
+These use an ephemeral local HTTP port but do not make database writes:
+
+```powershell
+cd src\backend
 npm ci
 npm test
 ```
 
-The backend integration suite requires a separate PostgreSQL database. It never falls back to `DATABASE_URL`:
+## PostgreSQL integration tests
 
-```bash
-cd src/backend
-DATABASE_URL_TEST=postgresql://postgres:test-password@127.0.0.1:5432/campus_rides_test \
-NODE_ENV=test \
-SESSION_SECRET=test-only-session-secret-at-least-32-characters \
-npm test
+Create a separate local PostgreSQL database named `campus_rides_test` (for example, in pgAdmin). Use a test account/database only; the suite creates its schema and inserts/removes rows with a unique test prefix. It never targets `DATABASE_URL` or the development database. Do not point this command at production data.
+
+From `src\backend`, set the test URL for the current PowerShell session and run the explicit integration script:
+
+```powershell
+$env:DATABASE_URL_TEST = 'postgresql://postgres:YOUR_PASSWORD@localhost:5432/campus_rides_test'
+$env:NODE_ENV = 'test'
+npm run test:integration
+Remove-Item Env:DATABASE_URL_TEST
+Remove-Item Env:NODE_ENV
 ```
 
-The test database must not be a development or production database. The integration suite applies the schema and cleans its test rows before and after execution.
+Replace `YOUR_PASSWORD` with your local PostgreSQL password. The integration test loads `.env` only to compare the configured development URL against `DATABASE_URL_TEST`, then connects the test app exclusively to `DATABASE_URL_TEST`. It refuses to run if the two URLs match or if the test database name does not end in `_test`. It does not silently pass when the test URL is absent.
+
+## CI
+
+`.github/workflows/ci.yml` runs lint, frontend tests, build, backend unit/HTTP tests, and the integration suite against a dedicated ephemeral `campus_rides_test` PostgreSQL service. The integration step receives `DATABASE_URL_TEST` explicitly, so CI cannot silently skip those checks.
+
+## Audit findings and reproduction
+
+The audit found and fixed these issues:
+
+1. **Integration tests could silently skip locally.** Before the fix, `npm test` included the integration file, but without `DATABASE_URL_TEST` it registered one skipped placeholder and exited successfully. Reproduce the old behavior by running `npm test` with `DATABASE_URL_TEST` unset. Now `npm test` runs only non-database backend tests, while `npm run test:integration` fails fast if `DATABASE_URL_TEST` is missing.
+2. **Integration setup/teardown deleted every row in the configured database.** Before the fix, the `before` and `after` hooks issued unqualified `DELETE FROM` statements for ratings, messages, bookings, rides, and users. The suite now requires an `_test` database and only removes rows connected to the unique `test-<timestamp>-` users created in that run.
+3. **The integration app could connect to the wrong database in CI.** CI supplied `DATABASE_URL_TEST`, but the application pool reads `DATABASE_URL`. The suite now validates the URL before app import, sets the app pool URL to the isolated test URL, and verifies it is distinct from the development URL loaded from `.env`.
+
+## Current coverage gaps
+
+- No browser-level end-to-end automation currently drives the full frontend-to-PostgreSQL workflow.
+- Rate-limit behavior, CSRF protection, and account password changes are not covered by automated tests; password changes are not implemented, and CSRF tokens are not implemented in this MVP.
+- Concurrent acceptance is covered at the HTTP/database integration level, but there is no stress test across many simultaneous requests or multiple app processes.

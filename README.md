@@ -266,26 +266,23 @@ cd src/backend
 npm test
 ```
 
-The backend test suite includes API and database integration tests.
-
-**Important:** Database integration tests are skipped when `DATABASE_URL_TEST` is not configured. Health and guard tests remain runnable without the test database.
+`npm test` runs the backend HTTP health and authentication-guard tests. These do not write to PostgreSQL.
 
 ### Running Backend Integration Tests
 
-Integration tests require a dedicated PostgreSQL test database. They must never use the development or production database.
+Integration tests use a dedicated PostgreSQL test database and must never target development or production data. Create a separate database named `campus_rides_test` in pgAdmin. From PowerShell in `src\backend`, run:
 
-Create a separate database named `campus_rides_test` and configure:
-
-```bash
-DATABASE_URL_TEST=postgresql://postgres:test-password@localhost:5432/campus_rides_test \
-NODE_ENV=test \
-SESSION_SECRET=test-only-session-secret-at-least-32-characters \
-npm test
+```powershell
+$env:DATABASE_URL_TEST = 'postgresql://postgres:YOUR_PASSWORD@localhost:5432/campus_rides_test'
+$env:NODE_ENV = 'test'
+npm run test:integration
+Remove-Item Env:DATABASE_URL_TEST
+Remove-Item Env:NODE_ENV
 ```
 
-Run this command from `src/backend`.
+Replace `YOUR_PASSWORD` with your local PostgreSQL password. The integration command fails if the URL is missing, if the database name does not end in `_test`, or if it matches `DATABASE_URL`; it does not silently skip.
 
-The integration suite creates the required schema and cleans its test data before and after each run.
+The integration suite creates the required schema and cleans only rows created with its unique test prefix.
 
 It also includes a concurrent final-seat booking acceptance test.
 

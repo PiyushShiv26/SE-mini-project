@@ -3,20 +3,44 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const databaseUrl = process.env.DATABASE_URL_TEST
+const configuredDatabaseUrl = process.env.DATABASE_URL || await readConfiguredDatabaseUrl()
+
+async function readConfiguredDatabaseUrl() {
+  try {
+    const content = await readFile(new URL('../../src/backend/.env', import.meta.url), 'utf8')
+    const line = content.split(/\r?\n/).find(item => /^\s*DATABASE_URL\s*=/.test(item))
+    if (!line) return undefined
+    const value = line.replace(/^\s*DATABASE_URL\s*=\s*/, '').trim()
+    return value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+      ? value.slice(1, -1)
+      : value
+  } catch (error) {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
 
 if (!databaseUrl) {
-  test('PostgreSQL integration suite requires DATABASE_URL_TEST', { skip: 'Set DATABASE_URL_TEST to an isolated test database.' }, () => {})
-} else {
-  if (process.env.DATABASE_URL && process.env.DATABASE_URL === databaseUrl) {
-    throw new Error('DATABASE_URL_TEST must be different from DATABASE_URL.')
-  }
-  process.env.NODE_ENV = 'test'
-  process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-only-session-secret-at-least-32-chars'
-  const [{ default: app, pool }] = await Promise.all([import('../../src/backend/src/app.js')])
-  const schema = await readFile(new URL('../../src/db/schema.sql', import.meta.url), 'utf8')
-  const prefix = `test-${Date.now()}-`
-  let server
-  let base
+  throw new Error('DATABASE_URL_TEST is required. Set it to a dedicated database whose name ends in _test; no integration tests were run.')
+}
+
+const testDatabase = new URL(databaseUrl)
+const testDatabaseName = decodeURIComponent(testDatabase.pathname.replace(/^\//, ''))
+if (!testDatabaseName.endsWith('_test')) {
+  throw new Error(`Refusing to run destructive integration cleanup on database "${testDatabaseName}". The test database name must end in _test.`)
+}
+if (configuredDatabaseUrl && configuredDatabaseUrl === databaseUrl) {
+  throw new Error('DATABASE_URL_TEST must be different from DATABASE_URL.')
+}
+
+process.env.DATABASE_URL = databaseUrl
+process.env.NODE_ENV = 'test'
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-only-session-secret-at-least-32-chars'
+const { default: app, pool } = await import('../../src/backend/src/app.js')
+const schema = await readFile(new URL('../../src/db/schema.sql', import.meta.url), 'utf8')
+const prefix = `test-${Date.now()}-`
+let server
+let base
 
   const request = async (path, options = {}, cookie = '') => {
     const response = await fetch(`${base}${path}`, {
@@ -53,24 +77,27 @@ if (!databaseUrl) {
 
   before(async () => {
     await pool.query(schema)
-    await pool.query('DELETE FROM ratings')
-    await pool.query('DELETE FROM messages')
-    await pool.query('DELETE FROM bookings')
-    await pool.query('DELETE FROM rides')
-    await pool.query('DELETE FROM users')
     server = app.listen(0)
     await new Promise(resolve => server.once('listening', resolve))
     base = `http://127.0.0.1:${server.address().port}`
   })
 
   after(async () => {
-    await pool.query('DELETE FROM ratings')
-    await pool.query('DELETE FROM messages')
-    await pool.query('DELETE FROM bookings')
-    await pool.query('DELETE FROM rides')
-    await pool.query(`DELETE FROM users WHERE email LIKE '${prefix}%'`)
-    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-    await pool.end()
+    if (server) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    try {
+      const { rows } = await pool.query('SELECT id FROM users WHERE email LIKE $1', [`${prefix}%`])
+      const userIds = rows.map(row => String(row.id))
+      if (userIds.length) {
+        await pool.query("DELETE FROM session WHERE sess->'user'->>'id' = ANY($1::text[])", [userIds])
+        await pool.query('DELETE FROM ratings WHERE rater_id=ANY($1::bigint[]) OR ratee_id=ANY($1::bigint[]) OR ride_id IN (SELECT id FROM rides WHERE driver_id=ANY($1::bigint[]))', [userIds])
+        await pool.query('DELETE FROM messages WHERE sender_id=ANY($1::bigint[]) OR ride_id IN (SELECT id FROM rides WHERE driver_id=ANY($1::bigint[]))', [userIds])
+        await pool.query('DELETE FROM bookings WHERE passenger_id=ANY($1::bigint[]) OR ride_id IN (SELECT id FROM rides WHERE driver_id=ANY($1::bigint[]))', [userIds])
+        await pool.query('DELETE FROM rides WHERE driver_id=ANY($1::bigint[])', [userIds])
+        await pool.query('DELETE FROM users WHERE id=ANY($1::bigint[])', [userIds])
+      }
+    } finally {
+      await pool.end()
+    }
   })
 
   describe('public and authentication APIs', () => {
@@ -346,4 +373,3 @@ if (!databaseUrl) {
       assert.ok(booking.id)
     })
   })
-}

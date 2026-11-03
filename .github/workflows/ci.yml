@@ -55,8 +55,12 @@ jobs:
 
       - name: Test backend
         working-directory: src/backend
+        run: npm test
+
+      - name: Test backend integration
+        working-directory: src/backend
         env:
           NODE_ENV: test
           DATABASE_URL_TEST: postgresql://postgres:test-password@localhost:5432/campus_rides_test
           SESSION_SECRET: ci-test-session-secret-at-least-32-characters
-        run: npm test
+        run: npm run test:integration
