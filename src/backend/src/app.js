@@ -16,7 +16,17 @@ app.use(helmet())
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }))
 app.use(express.json({ limit: '20kb' }))
 app.use(session({ name: 'campus.sid', secret: process.env.SESSION_SECRET || 'dev-only-change-this-secret', resave: false, saveUninitialized: false, store: new PgStore({ pool, createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 24 * 7 } }))
-const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false })
+const authLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+
+  // Skip rate limiting during automated tests.
+  // Rate limiting remains enabled in development and production.
+  skip: () => process.env.NODE_ENV === 'test'
+})
+
 const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 const fail = (status, code, message) => Object.assign(new Error(message), { status, code })
 const auth = (req, _res, next) => req.session.user ? next() : next(fail(401, 'UNAUTHENTICATED', 'Please sign in to continue.'))
