@@ -50,8 +50,34 @@ app.post('/api/auth/login', authLimit, asyncRoute(async (req, res) => {
 app.post('/api/auth/logout', auth, (req, res, next) => req.session.destroy(err => err ? next(err) : res.clearCookie('campus.sid').status(204).end()))
 app.get('/api/me', auth, (req, res) => res.json({ user: req.session.user }))
 app.patch('/api/me', auth, asyncRoute(async (req, res) => {
-  const name = String(req.body.name || '').trim(); if (name.length < 2 || name.length > 80) throw fail(400, 'VALIDATION_ERROR', 'Name must be between 2 and 80 characters.')
-  const { rows: [u] } = await pool.query('UPDATE users SET name=$1,updated_at=now() WHERE id=$2 RETURNING id,name,email,created_at', [name, req.session.user.id]); req.session.user = cleanUser(u); res.json({ user: req.session.user })
+  const updates = req.body
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    throw fail(400, 'VALIDATION_ERROR', 'Provide a profile update object.')
+  }
+
+  const unsupportedFields = Object.keys(updates).filter(field => field !== 'name')
+  if (unsupportedFields.length) {
+    throw fail(400, 'VALIDATION_ERROR', 'Only the name field can be updated.')
+  }
+  if (typeof updates.name !== 'string') {
+    throw fail(400, 'VALIDATION_ERROR', 'Name must be a string between 2 and 80 characters.')
+  }
+
+  const name = updates.name.trim()
+  const nameLength = Array.from(name).length
+  if (nameLength < 2 || nameLength > 80) {
+    throw fail(400, 'VALIDATION_ERROR', 'Name must be between 2 and 80 characters.')
+  }
+
+  // The target user always comes from the authenticated session, never the request body.
+  const { rows: [u] } = await pool.query(
+    'UPDATE users SET name=$1,updated_at=now() WHERE id=$2 RETURNING id,name,email,created_at',
+    [name, req.session.user.id],
+  )
+  if (!u) throw fail(404, 'PROFILE_NOT_FOUND', 'Your profile could not be found.')
+
+  req.session.user = cleanUser(u)
+  res.json({ user: req.session.user })
 }))
 
 app.get('/api/rides', asyncRoute(async (req, res) => {
