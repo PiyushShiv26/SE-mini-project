@@ -64,6 +64,38 @@ describe('authentication screens', () => {
     expect(JSON.parse(post[1].body)).toMatchObject({ pickup: 'PES University', destination: 'Indiranagar', totalSeats: 2 })
   })
 
+  it('shows permitted profile fields and saves a validated name update', async () => {
+    let savedPayload
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me') && options.method === 'PATCH') {
+        savedPayload = JSON.parse(options.body)
+        return { ok: true, json: async () => ({ user: { id: '21', name: 'Updated Student', email: 'student@example.edu' } }) }
+      }
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '21', name: 'Profile Student', email: 'student@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, profile/i })
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }))
+
+    expect(await screen.findByRole('heading', { name: /profile & settings/i })).toBeInTheDocument()
+    const nameInput = screen.getByLabelText(/full name/i)
+    const emailInput = screen.getByLabelText(/email address/i)
+    expect(nameInput).toHaveValue('Profile Student')
+    expect(nameInput).toHaveAttribute('maxLength', '80')
+    expect(emailInput).toBeDisabled()
+    expect(emailInput).toHaveValue('student@example.edu')
+
+    fireEvent.change(nameInput, { target: { value: 'Updated Student' } })
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/profile updated/i)
+    expect(savedPayload).toEqual({ name: 'Updated Student' })
+    expect(nameInput).toHaveValue('Updated Student')
+  })
+
   it('shows API authentication failures without losing the login form', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
       if (url.endsWith('/me')) return { ok: false, status: 401, json: async () => ({ error: { message: 'Please sign in.' } }) }

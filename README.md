@@ -324,7 +324,7 @@ Health check:
 | POST | `/auth/login` | Log in |
 | POST | `/auth/logout` | Log out |
 | GET | `/me` | Retrieve current profile |
-| PATCH | `/me` | Update profile |
+| PATCH | `/me` | Update the signed-in user’s name (2–80 characters); email and account ID are read-only |
 
 ### Rides and Bookings
 

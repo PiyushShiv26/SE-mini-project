@@ -130,12 +130,64 @@ if (!databaseUrl) {
       assert.equal(login.body.error.code, 'INVALID_CREDENTIALS')
     })
 
+    test('validates profile updates and prevents cross-account changes', async () => {
+      const owner = await register('Profile Owner', `${prefix}profile-owner@example.edu`)
+      const other = await register('Profile Other', `${prefix}profile-other@example.edu`)
+
+      const valid = await request('/api/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '  Updated Profile Owner  ' }),
+      }, owner.cookie)
+      assert.equal(valid.response.status, 200)
+      assert.equal(valid.body.user.name, 'Updated Profile Owner')
+      assert.equal(valid.body.user.email, owner.email)
+
+      const persisted = await pool.query('SELECT name FROM users WHERE id=$1', [valid.body.user.id])
+      assert.equal(persisted.rows[0].name, 'Updated Profile Owner')
+
+      const invalidPayloads = [
+        undefined,
+        {},
+        { name: ' ' },
+        { name: 'A' },
+        { name: 'x'.repeat(81) },
+        { name: 42 },
+        { name: ['Not', 'a', 'name'] },
+        { name: 'Changed Name', email: 'attacker@example.edu' },
+        { name: 'Changed Name', id: other.body.user.id },
+      ]
+
+      for (const payload of invalidPayloads) {
+        const invalid = await request('/api/me', {
+          method: 'PATCH',
+          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        }, owner.cookie)
+        assert.equal(invalid.response.status, 400)
+        assert.equal(invalid.body.error.code, 'VALIDATION_ERROR')
+      }
+
+      const ownerProfile = await request('/api/me', {}, owner.cookie)
+      const otherProfile = await request('/api/me', {}, other.cookie)
+      assert.equal(ownerProfile.body.user.name, 'Updated Profile Owner')
+      assert.equal(otherProfile.body.user.name, 'Profile Other')
+
+      const otherPersisted = await pool.query('SELECT name FROM users WHERE id=$1', [other.body.user.id])
+      assert.equal(otherPersisted.rows[0].name, 'Profile Other')
+    })
+
     test('rejects protected APIs without a session', async () => {
       for (const path of ['/api/me', '/api/rides/mine', '/api/dashboard', '/api/history', '/api/conversations']) {
         const result = await request(path)
         assert.equal(result.response.status, 401, path)
         assert.equal(result.body.error.code, 'UNAUTHENTICATED', path)
       }
+
+      const profileUpdate = await request('/api/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: 'Unauthorised Update' }),
+      })
+      assert.equal(profileUpdate.response.status, 401)
+      assert.equal(profileUpdate.body.error.code, 'UNAUTHENTICATED')
     })
   })
 

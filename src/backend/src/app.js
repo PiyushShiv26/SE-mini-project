@@ -16,7 +16,17 @@ app.use(helmet())
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }))
 app.use(express.json({ limit: '20kb' }))
 app.use(session({ name: 'campus.sid', secret: process.env.SESSION_SECRET || 'dev-only-change-this-secret', resave: false, saveUninitialized: false, store: new PgStore({ pool, createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 24 * 7 } }))
-const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false })
+const authLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+
+  // Skip rate limiting during automated tests.
+  // Rate limiting remains enabled in development and production.
+  skip: () => process.env.NODE_ENV === 'test'
+})
+
 const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 const fail = (status, code, message) => Object.assign(new Error(message), { status, code })
 const auth = (req, _res, next) => req.session.user ? next() : next(fail(401, 'UNAUTHENTICATED', 'Please sign in to continue.'))
@@ -50,8 +60,34 @@ app.post('/api/auth/login', authLimit, asyncRoute(async (req, res) => {
 app.post('/api/auth/logout', auth, (req, res, next) => req.session.destroy(err => err ? next(err) : res.clearCookie('campus.sid').status(204).end()))
 app.get('/api/me', auth, (req, res) => res.json({ user: req.session.user }))
 app.patch('/api/me', auth, asyncRoute(async (req, res) => {
-  const name = String(req.body.name || '').trim(); if (name.length < 2 || name.length > 80) throw fail(400, 'VALIDATION_ERROR', 'Name must be between 2 and 80 characters.')
-  const { rows: [u] } = await pool.query('UPDATE users SET name=$1,updated_at=now() WHERE id=$2 RETURNING id,name,email,created_at', [name, req.session.user.id]); req.session.user = cleanUser(u); res.json({ user: req.session.user })
+  const updates = req.body
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    throw fail(400, 'VALIDATION_ERROR', 'Provide a profile update object.')
+  }
+
+  const unsupportedFields = Object.keys(updates).filter(field => field !== 'name')
+  if (unsupportedFields.length) {
+    throw fail(400, 'VALIDATION_ERROR', 'Only the name field can be updated.')
+  }
+  if (typeof updates.name !== 'string') {
+    throw fail(400, 'VALIDATION_ERROR', 'Name must be a string between 2 and 80 characters.')
+  }
+
+  const name = updates.name.trim()
+  const nameLength = Array.from(name).length
+  if (nameLength < 2 || nameLength > 80) {
+    throw fail(400, 'VALIDATION_ERROR', 'Name must be between 2 and 80 characters.')
+  }
+
+  // The target user always comes from the authenticated session, never the request body.
+  const { rows: [u] } = await pool.query(
+    'UPDATE users SET name=$1,updated_at=now() WHERE id=$2 RETURNING id,name,email,created_at',
+    [name, req.session.user.id],
+  )
+  if (!u) throw fail(404, 'PROFILE_NOT_FOUND', 'Your profile could not be found.')
+
+  req.session.user = cleanUser(u)
+  res.json({ user: req.session.user })
 }))
 
 app.get('/api/rides', asyncRoute(async (req, res) => {

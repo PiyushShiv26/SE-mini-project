@@ -64,7 +64,7 @@ function App() {
     {page==='my-rides'&&<><p className="muted intro-copy">Manage the rides you’ve offered and respond to passenger requests.</p><div className="ride-results">{rides.map(r=><div key={r.id}><RideCard ride={{...r,driver_name:'You'}}/><div className="manage-row"><span className={`status ${(r.status||'OPEN').toLowerCase()}`}>{r.status||'OPEN'} · {r.pending_requests||0} pending</span>{r.status==='OPEN'&&<button className="text-button cancel-ride" onClick={()=>{if(window.confirm('Cancel this ride and notify passengers?'))act(()=>call(`/rides/${r.id}/cancel`,{method:'PATCH'}),'Ride cancelled.')}}>Cancel ride</button>}</div><Requests ride={r} act={act}/></div>)}</div>{!rides.length&&<Empty title="Your driver seat is waiting" text="Share your route and make the most of your empty seats." action="Offer a ride" onClick={()=>setPage('offer')}/>}</>}
     {page==='messages'&&<Messages user={user}/>}
     {page==='history'&&<><p className="muted intro-copy">A record of your journeys as a driver and passenger.</p><div className="ride-results">{rides.map(r=><HistoryItem key={`${r.id}-${r.role}-${r.counterpart_id}`} ride={r}/>)}</div>{!rides.length&&<Empty title="Your ride history is empty" text="When you offer or join a ride, it will show up here." action="Find a ride" onClick={()=>setPage('find')}/>}</>}
-    {page==='profile'&&<Profile user={user} onSave={async name=>{const d=await call('/me',{method:'PATCH',body:JSON.stringify({name})});setUser(d.user);setToast('Profile updated.')}} onLogout={logout}/>}
+    {page==='profile'&&<Profile user={user} onSave={async name=>{const d=await call('/me',{method:'PATCH',body:JSON.stringify({name})});setUser(d.user);setToast('Profile updated.');return d.user}} onLogout={logout}/>}
     </div><footer className="footer">Campusride <span>·</span> Made for the PES University community <span className="footer-right">No payments · No live location tracking</span></footer></main></div>
 }
 
@@ -73,6 +73,38 @@ function Offer({onDone}) { const [form,setForm]=useState({pickup:'',destination:
 function Requests({ride,act}) { const [requests,setRequests]=useState([]);useEffect(()=>{call(`/rides/${ride.id}/bookings`).then(d=>setRequests(d.bookings)).catch(()=>{})},[ride.id,act]);return requests.length?<div className="request-list"><b>Passenger requests</b>{requests.map(b=><div className="request-item" key={b.id}><span>{b.passenger_name} · {b.seats} seat(s)</span><span className={`status ${b.status.toLowerCase()}`}>{b.status}</span>{b.status==='PENDING'&&<><button onClick={()=>act(()=>call(`/bookings/${b.id}`,{method:'PATCH',body:JSON.stringify({status:'ACCEPTED'})}),'Request accepted.')}>Accept</button><button onClick={()=>act(()=>call(`/bookings/${b.id}`,{method:'PATCH',body:JSON.stringify({status:'REJECTED'})}),'Request declined.')}>Decline</button></>}{b.status==='ACCEPTED'&&new Date(ride.departure_at)<=new Date()&&<button onClick={()=>act(()=>call(`/bookings/${b.id}`,{method:'PATCH',body:JSON.stringify({status:'COMPLETED'})}),'Ride marked complete.')}>Complete ride</button>}</div>)}</div>:null }
 function HistoryItem({ride}) { const [rating,setRating]=useState(false),[stars,setStars]=useState('5'),[review,setReview]=useState(''),[message,setMessage]=useState('');return <div><RideCard ride={{...ride,driver_name:ride.role==='DRIVER'?'You':ride.counterpart_name}}/><div className="history-detail"><span className="muted">{ride.role==='DRIVER'?'You offered this ride':'You joined this ride'}{ride.booking_status?` · ${ride.booking_status.toLowerCase()}`:''}</span>{ride.booking_status==='COMPLETED'&&ride.counterpart_id&&<button className="text-button" onClick={()=>setRating(!rating)}>{rating?'Close':'Rate '+ride.counterpart_name}</button>}</div>{rating&&<form className="rating-form" onSubmit={async e=>{e.preventDefault();try{await call('/ratings',{method:'POST',body:JSON.stringify({rideId:ride.id,rateeId:ride.counterpart_id,stars:Number(stars),review})});setMessage('Rating submitted.');setRating(false)}catch(err){setMessage(err.message)}}}><label>Rating<select value={stars} onChange={e=>setStars(e.target.value)}>{[5,4,3,2,1].map(n=><option key={n} value={n}>{n} star{n===1?'':'s'}</option>)}</select></label><input aria-label="Review" maxLength="500" placeholder="Short review · optional" value={review} onChange={e=>setReview(e.target.value)}/><button className="button small primary">Submit</button>{message&&<span className="muted">{message}</span>}</form>}</div> }
 function Messages({user}) { const [conversations,setConversations]=useState([]),[active,setActive]=useState(null),[messages,setMessages]=useState([]),[body,setBody]=useState(''),[error,setError]=useState(''); const load=useCallback(async()=>{try{const d=await call('/conversations');setConversations(d.conversations);if(!active&&d.conversations[0])setActive(d.conversations[0].ride_id)}catch(e){setError(e.message)}},[active]); useEffect(()=>{load()},[load]); useEffect(()=>{if(!active)return;let mounted=true;const fetchMessages=()=>call(`/rides/${active}/messages`).then(d=>{if(mounted)setMessages(d.messages)}).catch(e=>setError(e.message));fetchMessages();const timer=setInterval(fetchMessages,10000);return()=>{mounted=false;clearInterval(timer)}},[active]); async function send(e){e.preventDefault();try{const d=await call(`/rides/${active}/messages`,{method:'POST',body:JSON.stringify({body})});setMessages([...messages,d.message]);setBody('');setError('')}catch(e){setError(e.message)}} const selected=conversations.find(c=>String(c.ride_id)===String(active));return <div className="chat-layout"><aside className="chat-list"><h3>Conversations</h3>{conversations.map(c=><button key={c.ride_id} className={`chat-choice ${String(active)===String(c.ride_id)?'active':''}`} onClick={()=>setActive(c.ride_id)}><span className="avatar">{c.participant_name[0]}</span><span><b>{c.participant_name}</b><small>{c.pickup} → {c.destination}</small><small>{c.last_message||'Ride confirmed · start a conversation'}</small></span></button>)}{!conversations.length&&<p className="muted chat-empty">Conversations appear after a driver accepts your seat request.</p>}</aside><section className="chat-panel">{selected?<><header><span className="avatar">{selected.participant_name[0]}</span><span><b>{selected.participant_name}</b><small>{selected.pickup} → {selected.destination}</small></span></header><div className="message-list">{messages.length?messages.map(m=><div key={m.id} className={`message ${String(m.sender_id)===String(user.id)?'mine':''}`}><span>{m.body}</span><small>{m.sender_name} · {new Date(m.created_at).toLocaleString()}</small></div>):<Empty title="Say hello" text="Coordinate pickup details with your ride participant."/>}</div><form className="message-form" onSubmit={send}><input aria-label="Message" maxLength="2000" required placeholder="Write a message…" value={body} onChange={e=>setBody(e.target.value)}/><button className="button primary">Send →</button></form></>:<div className="empty"><span className="empty-icon">✉</span><h3>No conversations yet</h3><p>Once a driver accepts your booking, your private ride conversation will be available here.</p></div>}{error&&<p className="notice error">{error}</p>}</section></div> }
-function Profile({user,onSave,onLogout}) { const [name,setName]=useState(user.name),[error,setError]=useState('');return <section className="form-card profile-card"><div className="profile-large avatar">{user.name[0].toUpperCase()}</div><span className="eyebrow">YOUR ACCOUNT</span><h2>Profile & settings</h2><form onSubmit={async e=>{e.preventDefault();try{await onSave(name)}catch(err){setError(err.message)}}}><label>Full name<input required minLength="2" maxLength="80" value={name} onChange={e=>setName(e.target.value)}/></label><label>Email address<input value={user.email} disabled/><small className="muted">Email address can’t be changed here.</small></label>{error&&<div className="notice error">{error}</div>}<button className="button primary">Save changes</button></form><hr/><p className="muted">Password changes are not available in this version.</p><button className="button outline" onClick={onLogout}>Sign out</button></section> }
+function Profile({user,onSave,onLogout}) {
+  const [name,setName]=useState(user.name),[error,setError]=useState(''),[saving,setSaving]=useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      const updatedUser = await onSave(name)
+      setName(updatedUser.name)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <section className="form-card profile-card">
+    <div className="profile-large avatar">{user.name[0].toUpperCase()}</div>
+    <span className="eyebrow">YOUR ACCOUNT</span>
+    <h2>Profile & settings</h2>
+    <p className="muted">Update the profile information visible to other Campusride students.</p>
+    <form onSubmit={submit}>
+      <label>Full name<input required minLength="2" maxLength="80" value={name} onChange={e=>setName(e.target.value)}/></label>
+      <label>Email address<input type="email" value={user.email} disabled/><small className="muted">Your email address is read-only and cannot be changed here.</small></label>
+      {error&&<div className="notice error" role="alert">{error}</div>}
+      <button className="button primary" disabled={saving}>{saving?'Saving…':'Save changes'}</button>
+    </form>
+    <hr/>
+    <p className="muted">Password changes are not available in this version.</p>
+    <button className="button outline" onClick={onLogout}>Sign out</button>
+  </section>
+}
 
 export default App
