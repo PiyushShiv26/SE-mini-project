@@ -298,6 +298,50 @@ let base
       assert.equal(tooMany.response.status, 409)
     })
 
+    test('keeps seats available while a booking request is pending', async () => {
+      const driver = await register('Pending Driver', `${prefix}pending-driver@example.edu`)
+      const passenger = await register('Pending Passenger', `${prefix}pending-passenger@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 1 })
+
+      const booking = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST',
+        body: JSON.stringify({ seats: 1 }),
+      }, passenger.cookie)
+      assert.equal(booking.response.status, 201)
+      assert.equal(booking.body.booking.status, 'PENDING')
+
+      const pendingSeats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
+      assert.equal(pendingSeats.rows[0].available_seats, 1)
+
+      const accepted = await request(`/api/bookings/${booking.body.booking.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(accepted.response.status, 200)
+
+      const acceptedSeats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
+      assert.equal(acceptedSeats.rows[0].available_seats, 0)
+    })
+
+    test('prevents concurrent duplicate active booking requests', async () => {
+      const driver = await register('Duplicate Driver', `${prefix}request-driver@example.edu`)
+      const passenger = await register('Duplicate Passenger', `${prefix}request-passenger@example.edu`)
+      const ride = await createRide(driver.cookie)
+      const options = { method: 'POST', body: JSON.stringify({ seats: 1 }) }
+
+      const requests = await Promise.all([
+        request(`/api/rides/${ride.id}/bookings`, options, passenger.cookie),
+        request(`/api/rides/${ride.id}/bookings`, options, passenger.cookie),
+      ])
+
+      assert.deepEqual(requests.map(result => result.response.status).sort(), [201, 409])
+      const activeRequests = await pool.query(
+        "SELECT count(*)::int AS count FROM bookings WHERE ride_id=$1 AND passenger_id=$2 AND status IN ('PENDING','ACCEPTED')",
+        [ride.id, passenger.body.user.id],
+      )
+      assert.equal(activeRequests.rows[0].count, 1)
+    })
+
     test('cancels rides and their pending bookings, and enforces ownership', async () => {
       const driver = await register('Cancel Driver', `${prefix}cancel-driver@example.edu`)
       const passenger = await register('Cancel Passenger', `${prefix}cancel-passenger@example.edu`)
