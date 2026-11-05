@@ -342,6 +342,41 @@ let base
       assert.equal(activeRequests.rows[0].count, 1)
     })
 
+    test('allows only the ride owner to reject a request without reserving seats', async () => {
+      const driver = await register('Reject Driver', `${prefix}reject-driver@example.edu`)
+      const passenger = await register('Reject Passenger', `${prefix}reject-passenger@example.edu`)
+      const outsider = await register('Reject Outsider', `${prefix}reject-outsider@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 2 })
+      const booking = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST',
+        body: JSON.stringify({ seats: 1 }),
+      }, passenger.cookie)
+
+      for (const cookie of [passenger.cookie, outsider.cookie]) {
+        const forbidden = await request(`/api/bookings/${booking.body.booking.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'REJECTED' }),
+        }, cookie)
+        assert.equal(forbidden.response.status, 403)
+      }
+
+      const rejected = await request(`/api/bookings/${booking.body.booking.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'REJECTED' }),
+      }, driver.cookie)
+      assert.equal(rejected.response.status, 200)
+      assert.equal(rejected.body.booking.status, 'REJECTED')
+
+      const seats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
+      assert.equal(seats.rows[0].available_seats, 2)
+
+      const retry = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST',
+        body: JSON.stringify({ seats: 1 }),
+      }, passenger.cookie)
+      assert.equal(retry.response.status, 201)
+    })
+
     test('cancels rides and their pending bookings, and enforces ownership', async () => {
       const driver = await register('Cancel Driver', `${prefix}cancel-driver@example.edu`)
       const passenger = await register('Cancel Passenger', `${prefix}cancel-passenger@example.edu`)
@@ -376,6 +411,11 @@ let base
       assert.equal(results.filter(item => item.response.status === 409).length, 1)
       const seats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
       assert.equal(seats.rows[0].available_seats, 0)
+      const bookings = await pool.query('SELECT id,status FROM bookings WHERE id=ANY($1::bigint[])', [
+        results.map((_, index) => requests[index].body.booking.id),
+      ])
+      assert.equal(bookings.rows.filter(item => item.status === 'ACCEPTED').length, 1)
+      assert.equal(bookings.rows.filter(item => item.status === 'PENDING').length, 1)
     })
 
     test('rejects empty messages and invalid ratings', async () => {
