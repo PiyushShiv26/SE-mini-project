@@ -412,7 +412,7 @@ let base
       const seats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
       assert.equal(seats.rows[0].available_seats, 0)
       const bookings = await pool.query('SELECT id,status FROM bookings WHERE id=ANY($1::bigint[])', [
-        results.map((_, index) => requests[index].body.booking.id),
+        [requestA, requestB].map(item => item.body.booking.id),
       ])
       assert.equal(bookings.rows.filter(item => item.status === 'ACCEPTED').length, 1)
       assert.equal(bookings.rows.filter(item => item.status === 'PENDING').length, 1)
