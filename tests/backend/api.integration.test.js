@@ -308,6 +308,30 @@ let base
       assert.deepEqual(outsiderHistory.body.rides, [])
     })
 
+    test('creates and manages only the driver\'s own rides while rejecting invalid input', async () => {
+      const driver = await register('Ride Owner', `${prefix}ride-owner@example.edu`)
+      const passenger = await register('Ride Passenger', `${prefix}ride-passenger@example.edu`)
+
+      const invalid = await request('/api/rides', {
+        method: 'POST',
+        body: JSON.stringify({ pickup: '', destination: 'Metro', departureAt: new Date(Date.now() + 86400000).toISOString(), totalSeats: 1 }),
+      }, driver.cookie)
+      assert.equal(invalid.response.status, 400)
+
+      const ride = await createRide(driver.cookie, { pickup: 'PES University', destination: 'Forum Mall', totalSeats: 3 })
+      const mine = await request('/api/rides/mine', {}, driver.cookie)
+      assert.equal(mine.response.status, 200)
+      assert.ok(mine.body.rides.some(item => String(item.id) === String(ride.id)))
+
+      const notMine = await request('/api/rides/mine', {}, passenger.cookie)
+      assert.equal(notMine.response.status, 200)
+      assert.ok(!notMine.body.rides.some(item => String(item.id) === String(ride.id)))
+
+      const cancelled = await request(`/api/rides/${ride.id}/cancel`, { method: 'PATCH' }, driver.cookie)
+      assert.equal(cancelled.response.status, 200)
+      assert.equal(cancelled.body.ride.status, 'CANCELLED')
+    })
+
     test('validates ride and booking input and prevents over-capacity requests', async () => {
       const driver = await register('Validation Driver', `${prefix}validation-driver@example.edu`)
       const passenger = await register('Validation Passenger', `${prefix}validation-passenger@example.edu`)
