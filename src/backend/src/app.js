@@ -100,8 +100,30 @@ app.patch('/api/me', auth, asyncRoute(async (req, res) => {
 }))
 
 app.get('/api/rides', asyncRoute(async (req, res) => {
-  const q = String(req.query.q || '').trim().toLowerCase(), date = req.query.date || null, seats = Math.max(1, Number(req.query.seats) || 1)
-  const { rows } = await pool.query(`SELECT r.*,u.name AS driver_name,COALESCE((SELECT avg(stars)::numeric(3,1) FROM ratings WHERE ratee_id=u.id),0) AS driver_rating FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='OPEN' AND r.departure_at > now() AND r.available_seats >= $1 AND ($2::text IS NULL OR (lower(r.pickup) LIKE '%'||$2||'%' OR lower(r.destination) LIKE '%'||$2||'%')) AND ($3::date IS NULL OR r.departure_at::date=$3::date) ORDER BY r.departure_at LIMIT 100`, [seats, q || null, date])
+  const rawQuery = req.query.q ?? ''
+  const rawDate = req.query.date ?? ''
+  const rawSeats = req.query.seats ?? '1'
+  if (Array.isArray(rawQuery) || Array.isArray(rawDate) || Array.isArray(rawSeats)) {
+    throw fail(400, 'VALIDATION_ERROR', 'Search filters must each have one value.')
+  }
+
+  const q = String(rawQuery).trim().toLowerCase()
+  if (q.length > 120) throw fail(400, 'VALIDATION_ERROR', 'Search text must be 120 characters or fewer.')
+
+  const date = String(rawDate).trim()
+  if (date) {
+    const parsedDate = new Date(`${date}T00:00:00.000Z`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      throw fail(400, 'VALIDATION_ERROR', 'Enter a valid departure date in YYYY-MM-DD format.')
+    }
+  }
+
+  const seats = Number(rawSeats)
+  if (!Number.isInteger(seats) || seats < 1 || seats > 8) {
+    throw fail(400, 'VALIDATION_ERROR', 'Seat count must be a whole number between 1 and 8.')
+  }
+
+  const { rows } = await pool.query(`SELECT r.*,u.name AS driver_name,COALESCE((SELECT avg(stars)::numeric(3,1) FROM ratings WHERE ratee_id=u.id),0) AS driver_rating FROM rides r JOIN users u ON u.id=r.driver_id WHERE r.status='OPEN' AND r.departure_at > now() AND r.available_seats >= $1 AND ($2::text IS NULL OR (lower(r.pickup) LIKE '%'||$2||'%' OR lower(r.destination) LIKE '%'||$2||'%')) AND ($3::date IS NULL OR r.departure_at::date=$3::date) ORDER BY r.departure_at LIMIT 100`, [seats, q || null, date || null])
   res.json({ rides: rows.map(r => ({ ...r, matchReason: q ? 'Location text matches your search' : 'Upcoming ride with seats available' })) })
 }))
 app.post('/api/rides', auth, asyncRoute(async (req, res) => {
