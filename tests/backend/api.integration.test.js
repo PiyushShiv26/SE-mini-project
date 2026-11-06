@@ -115,6 +115,12 @@ let base
       const email = `${prefix}driver@example.edu`
       const registered = await register('Driver Student', email)
       assert.ok(registered.cookie.includes('campus.sid='))
+      assert.equal(registered.body.user.email, email)
+      assert.equal('password' in registered.body.user, false)
+      assert.equal('password_hash' in registered.body.user, false)
+      const storedPassword = await pool.query('SELECT password_hash FROM users WHERE id=$1', [registered.body.user.id])
+      assert.notEqual(storedPassword.rows[0].password_hash, 'password-123')
+      assert.match(storedPassword.rows[0].password_hash, /^\$2[aby]\$/)
       const me = await request('/api/me', {}, registered.cookie)
       assert.equal(me.body.user.email, email)
       const updated = await request('/api/me', { method: 'PATCH', body: JSON.stringify({ name: 'Updated Driver' }) }, registered.cookie)
@@ -126,9 +132,11 @@ let base
       assert.equal(protectedResponse.response.status, 401)
       const login = await request('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password: 'password-123' }),
+        body: JSON.stringify({ email: `  ${email.toUpperCase()}  `, password: 'password-123' }),
       })
       assert.equal(login.response.status, 200)
+      assert.ok(login.cookie.includes('campus.sid='))
+      assert.notEqual(login.cookie, registered.cookie, 'login rotates the session identifier')
       const loggedInMe = await request('/api/me', {}, login.cookie)
       assert.equal(loggedInMe.body.user.email, email)
       assert.equal(protectedResponse.body.error.code, 'UNAUTHENTICATED')
@@ -139,7 +147,7 @@ let base
       await register('Duplicate Student', email)
       const duplicate = await request('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name: 'Another Student', email, password: 'password-123' }),
+        body: JSON.stringify({ name: 'Another Student', email: email.toUpperCase(), password: 'password-123' }),
       })
       assert.equal(duplicate.response.status, 409)
       assert.equal(duplicate.body.error.code, 'EMAIL_TAKEN')
@@ -155,6 +163,13 @@ let base
       })
       assert.equal(login.response.status, 401)
       assert.equal(login.body.error.code, 'INVALID_CREDENTIALS')
+      const unknownEmail = await request('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: `${prefix}unknown@example.edu`, password: 'password-123' }),
+      })
+      assert.equal(unknownEmail.response.status, 401)
+      assert.equal(unknownEmail.body.error.code, 'INVALID_CREDENTIALS')
+      assert.equal(unknownEmail.body.error.message, login.body.error.message)
     })
 
     test('validates profile updates and prevents cross-account changes', async () => {
@@ -215,6 +230,19 @@ let base
       })
       assert.equal(profileUpdate.response.status, 401)
       assert.equal(profileUpdate.body.error.code, 'UNAUTHENTICATED')
+
+      const protectedRequests = [
+        ['/api/rides', { method: 'POST', body: JSON.stringify({}) }],
+        ['/api/rides/1/bookings', { method: 'POST', body: JSON.stringify({ seats: 1 }) }],
+        ['/api/bookings/1', { method: 'PATCH', body: JSON.stringify({ status: 'ACCEPTED' }) }],
+        ['/api/rides/1/messages', { method: 'POST', body: JSON.stringify({ body: 'Hello' }) }],
+        ['/api/ratings', { method: 'POST', body: JSON.stringify({}) }],
+      ]
+      for (const [path, options] of protectedRequests) {
+        const result = await request(path, options)
+        assert.equal(result.response.status, 401, `${options.method} ${path} should require authentication`)
+        assert.equal(result.body.error.code, 'UNAUTHENTICATED')
+      }
     })
   })
 

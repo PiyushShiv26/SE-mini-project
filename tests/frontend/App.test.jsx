@@ -29,6 +29,71 @@ describe('authentication screens', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/passwords do not match/i)
   })
 
+  it('creates an account through the API and opens the authenticated workspace', async () => {
+    const fetchMock = vi.fn(async url => {
+      if (url.endsWith('/me')) return { ok: false, status: 401, json: async () => ({ error: { message: 'Please sign in.' } }) }
+      if (url.endsWith('/auth/register')) return { ok: true, status: 201, json: async () => ({ user: { id: '42', name: 'Maya Student', email: 'maya@university.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByRole('heading', { name: /good rides/i })
+    fireEvent.click(screen.getByRole('button', { name: /join campusride/i }))
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Maya Student' } })
+    fireEvent.change(screen.getByLabelText(/^email address/i), { target: { value: 'maya@university.edu' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password-123' } })
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: 'password-123' } })
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    expect(await screen.findByRole('heading', { name: /good morning, maya/i })).toBeInTheDocument()
+    const registration = fetchMock.mock.calls.find(([url]) => url.endsWith('/auth/register'))
+    expect(JSON.parse(registration[1].body)).toEqual({ name: 'Maya Student', email: 'maya@university.edu', password: 'password-123' })
+    expect(registration[1].credentials).toBe('include')
+  })
+
+  it('signs in with credentialed API requests and loads the authenticated workspace', async () => {
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me') && options.method !== 'POST') return { ok: false, status: 401, json: async () => ({ error: { message: 'Please sign in.' } }) }
+      if (url.endsWith('/auth/login')) return { ok: true, json: async () => ({ user: { id: '43', name: 'Maya Student', email: 'maya@university.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByRole('heading', { name: /good rides/i })
+    fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }))
+    fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'maya@university.edu' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password-123' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in →/i }))
+
+    expect(await screen.findByRole('heading', { name: /good morning, maya/i })).toBeInTheDocument()
+    const login = fetchMock.mock.calls.find(([url]) => url.endsWith('/auth/login'))
+    expect(JSON.parse(login[1].body)).toEqual({ email: 'maya@university.edu', password: 'password-123' })
+    expect(login[1].credentials).toBe('include')
+  })
+
+  it('shows duplicate registration errors and keeps the sign-up form available', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me')) return { ok: false, status: 401, json: async () => ({ error: { message: 'Please sign in.' } }) }
+      if (url.endsWith('/auth/register') && options.method === 'POST') {
+        return { ok: false, status: 409, json: async () => ({ error: { message: 'An account with that email already exists.' } }) }
+      }
+      return { ok: true, json: async () => ({}) }
+    }))
+    render(<App />)
+    await screen.findByRole('heading', { name: /good rides/i })
+    fireEvent.click(screen.getByRole('button', { name: /join campusride/i }))
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Maya Student' } })
+    fireEvent.change(screen.getByLabelText(/^email address/i), { target: { value: 'maya@university.edu' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password-123' } })
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: 'password-123' } })
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already exists/i)
+    expect(screen.getByRole('heading', { name: /join your campus/i })).toBeInTheDocument()
+  })
+
   it('lets browser back move from sign-in to sign-up and back home', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: { message: 'Sign in' } }) }))
     render(<App />)
