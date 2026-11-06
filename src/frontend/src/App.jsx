@@ -17,7 +17,23 @@ function Auth({ onAuth, initialMode = 'login', onBack, onNavigate }) {
   const [mode, setMode] = useState(initialMode), [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' }), [error, setError] = useState(''), [busy, setBusy] = useState(false)
   useEffect(() => setMode(initialMode), [initialMode])
   function changeMode(nextMode) { setMode(nextMode); setError(''); onNavigate?.(nextMode) }
-  async function submit(e) { e.preventDefault(); setError(''); if (mode === 'register' && form.password !== form.confirm) return setError('Passwords do not match.'); setBusy(true); try { const d = await call(`/auth/${mode}`, { method: 'POST', body: JSON.stringify(form) }); onAuth(d.user) } catch (err) { setError(err.message) } finally { setBusy(false) } }
+  async function submit(e) {
+    e.preventDefault()
+    setError('')
+    if (mode === 'register' && form.password !== form.confirm) return setError('Passwords do not match.')
+    const credentials = mode === 'register'
+      ? { name: form.name, email: form.email, password: form.password }
+      : { email: form.email, password: form.password }
+    setBusy(true)
+    try {
+      const d = await call(`/auth/${mode}`, { method: 'POST', body: JSON.stringify(credentials) })
+      onAuth(d.user)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
   return <div className="auth-wrap"><form className="auth-card" onSubmit={submit}><div className="brand"><span className="brand-icon">↗</span> campus<span className="brand-light">ride</span></div>{onBack&&<button type="button" className="text-button auth-back" onClick={onBack}>← Back to home</button>}<p className="eyebrow">PES UNIVERSITY · TEAM 12</p><h1>{mode === 'login' ? 'Welcome back.' : 'Join your campus.'}</h1><p className="muted">{mode === 'login' ? 'Sign in to find your next shared ride.' : 'Create an account to offer or find rides.'}</p>
     {mode === 'register' && <label>Full name<input required minLength="2" maxLength="80" autoComplete="name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label>}
     <label>Email address<input required type="email" autoComplete="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></label>

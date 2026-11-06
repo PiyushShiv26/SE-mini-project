@@ -31,6 +31,13 @@ const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res, next))
 const fail = (status, code, message) => Object.assign(new Error(message), { status, code })
 const auth = (req, _res, next) => req.session.user ? next() : next(fail(401, 'UNAUTHENTICATED', 'Please sign in to continue.'))
 const cleanUser = ({ id, name, email, created_at }) => ({ id, name, email, createdAt: created_at })
+const establishSession = (req, user) => new Promise((resolve, reject) => {
+  req.session.regenerate(error => {
+    if (error) return reject(error)
+    req.session.user = user
+    req.session.save(saveError => saveError ? reject(saveError) : resolve(req.session.user))
+  })
+})
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'campus-ride-share-api' }))
 app.get('/api/openapi.json', (_req, res) => {
@@ -48,14 +55,16 @@ app.post('/api/auth/register', authLimit, asyncRoute(async (req, res) => {
   const hash = await bcrypt.hash(password, 12)
   try {
     const { rows: [u] } = await pool.query('INSERT INTO users(name,email,password_hash) VALUES($1,$2,$3) RETURNING id,name,email,created_at', [name, email, hash])
-    req.session.user = cleanUser(u); res.status(201).json({ user: req.session.user })
+    const user = await establishSession(req, cleanUser(u))
+    res.status(201).json({ user })
   } catch (e) { if (e.code === '23505') throw fail(409, 'EMAIL_TAKEN', 'An account with that email already exists.'); throw e }
 }))
 app.post('/api/auth/login', authLimit, asyncRoute(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase(), password = String(req.body.password || '')
   const { rows: [u] } = await pool.query('SELECT id,name,email,password_hash,created_at FROM users WHERE email=$1', [email])
   if (!u || !await bcrypt.compare(password, u.password_hash)) throw fail(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.')
-  req.session.regenerate(err => { if (err) return res.status(500).json({ error: { code: 'SESSION_ERROR', message: 'Could not start session.' } }); req.session.user = cleanUser(u); res.json({ user: req.session.user }) })
+  const user = await establishSession(req, cleanUser(u))
+  res.json({ user })
 }))
 app.post('/api/auth/logout', auth, (req, res, next) => req.session.destroy(err => err ? next(err) : res.clearCookie('campus.sid').status(204).end()))
 app.get('/api/me', auth, (req, res) => res.json({ user: req.session.user }))

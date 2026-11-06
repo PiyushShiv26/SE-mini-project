@@ -2,9 +2,9 @@
 
 ## Test inventory
 
-- `tests/frontend/App.test.jsx` — public landing/authentication screens, registration password confirmation, browser back/forward navigation, and ride creation request payload.
+- `tests/frontend/App.test.jsx` — public landing/authentication screens, successful registration and login, duplicate registration, password confirmation, browser back/forward navigation, and ride creation request payload.
 - `tests/backend/health.test.js` — HTTP health response and protected-route authentication guards. These run without database writes.
-- `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login/profile, input validation, authorization, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
+- `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
 
 No test is marked skipped. The database integration command fails before executing tests if its test database URL is missing or does not name a database ending in `_test`.
 
@@ -57,6 +57,8 @@ The audit found and fixed these issues:
 1. **Integration tests could silently skip locally.** Before the fix, `npm test` included the integration file, but without `DATABASE_URL_TEST` it registered one skipped placeholder and exited successfully. Reproduce the old behavior by running `npm test` with `DATABASE_URL_TEST` unset. Now `npm test` runs only non-database backend tests, while `npm run test:integration` fails fast if `DATABASE_URL_TEST` is missing.
 2. **Integration setup/teardown deleted every row in the configured database.** Before the fix, the `before` and `after` hooks issued unqualified `DELETE FROM` statements for ratings, messages, bookings, rides, and users. The suite now requires an `_test` database and only removes rows connected to the unique `test-<timestamp>-` users created in that run.
 3. **The integration app could connect to the wrong database in CI.** CI supplied `DATABASE_URL_TEST`, but the application pool reads `DATABASE_URL`. The suite now validates the URL before app import, sets the app pool URL to the isolated test URL, and verifies it is distinct from the development URL loaded from `.env`.
+
+4. **Registration did not rotate the session identifier.** Login already regenerated the session, while successful registration attached the new user to the current session. Registration now uses the same session regeneration and persistence path as login. The integration suite verifies session-backed access and login session rotation; frontend tests verify successful registration sends credentialed requests and opens the signed-in workspace.
 
 ## Current coverage gaps
 
