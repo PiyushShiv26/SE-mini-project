@@ -210,4 +210,44 @@ describe('authentication screens', () => {
     expect(await screen.findByRole('button', { name: /requested/i })).toBeDisabled()
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/bookings') && options.method === 'POST')).toBe(true)
   })
+
+  it('reflects a cancelled ride and hides its cancel action after refresh', async () => {
+    let rideStatus = 'OPEN'
+    const ride = {
+      id: 'ride-2',
+      pickup: 'PES',
+      destination: 'Metro',
+      departure_at: '2035-01-01T10:00:00Z',
+      available_seats: 2,
+      total_seats: 2,
+      pending_requests: 1,
+      status: rideStatus,
+    }
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '10', name: 'Driver Student', email: 'driver@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      if (url.endsWith('/rides/mine')) return { ok: true, json: async () => ({ rides: [{ ...ride, status: rideStatus, pending_requests: rideStatus === 'OPEN' ? 1 : 0 }] }) }
+      if (url.endsWith('/bookings')) return { ok: true, json: async () => ({ bookings: [{ id: 'booking-2', passenger_name: 'Passenger Student', seats: 1, status: rideStatus === 'OPEN' ? 'PENDING' : 'CANCELLED' }] }) }
+      if (url.endsWith('/cancel') && options.method === 'PATCH') {
+        rideStatus = 'CANCELLED'
+        return { ok: true, json: async () => ({ ride: { ...ride, status: rideStatus } }) }
+      }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, driver/i })
+    fireEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: /my rides/i }))
+    expect(await screen.findByText('OPEN · 1 pending')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel ride/i }))
+
+    expect(await screen.findByText('CANCELLED · 0 pending')).toBeInTheDocument()
+    expect(await screen.findByText('CANCELLED', { exact: true })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cancel ride/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent(/ride cancelled/i)
+    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/rides/ride-2/cancel') && options.method === 'PATCH')).toBe(true)
+  })
 })

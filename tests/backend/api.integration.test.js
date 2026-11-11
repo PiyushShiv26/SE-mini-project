@@ -495,19 +495,63 @@ let base
       assert.equal(retry.response.status, 201)
     })
 
-    test('cancels rides and their pending bookings, and enforces ownership', async () => {
+    test('cancels pending and accepted bookings only when cancelled by the ride owner', async () => {
       const driver = await register('Cancel Driver', `${prefix}cancel-driver@example.edu`)
-      const passenger = await register('Cancel Passenger', `${prefix}cancel-passenger@example.edu`)
-      const ride = await createRide(driver.cookie)
-      const booking = await request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, passenger.cookie)
-      const forbidden = await request(`/api/rides/${ride.id}/cancel`, { method: 'PATCH' }, passenger.cookie)
+      const acceptedPassenger = await register('Accepted Cancel Passenger', `${prefix}accepted-cancel-passenger@example.edu`)
+      const pendingPassenger = await register('Pending Cancel Passenger', `${prefix}pending-cancel-passenger@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 2 })
+      const acceptedBooking = await request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, acceptedPassenger.cookie)
+      const pendingBooking = await request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, pendingPassenger.cookie)
+      const accepted = await request(`/api/bookings/${acceptedBooking.body.booking.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(accepted.response.status, 200)
+
+      const forbidden = await request(`/api/rides/${ride.id}/cancel`, { method: 'PATCH' }, acceptedPassenger.cookie)
       assert.equal(forbidden.response.status, 404)
+      const unchanged = await pool.query(
+        'SELECT r.status ride_status,b.id booking_id,b.status booking_status FROM rides r JOIN bookings b ON b.ride_id=r.id WHERE r.id=$1 ORDER BY b.id',
+        [ride.id],
+      )
+      assert.equal(unchanged.rows[0].ride_status, 'OPEN')
+      assert.equal(unchanged.rows.find(row => String(row.booking_id) === String(acceptedBooking.body.booking.id)).booking_status, 'ACCEPTED')
+      assert.equal(unchanged.rows.find(row => String(row.booking_id) === String(pendingBooking.body.booking.id)).booking_status, 'PENDING')
+
       const cancelled = await request(`/api/rides/${ride.id}/cancel`, { method: 'PATCH' }, driver.cookie)
       assert.equal(cancelled.response.status, 200)
-      const row = await pool.query('SELECT status FROM bookings WHERE id=$1', [booking.body.booking.id])
-      assert.equal(row.rows[0].status, 'CANCELLED')
-      const unavailable = await request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, passenger.cookie)
+      assert.equal(cancelled.body.ride.status, 'CANCELLED')
+      const finalState = await pool.query(
+        'SELECT r.status ride_status,b.id booking_id,b.status booking_status FROM rides r JOIN bookings b ON b.ride_id=r.id WHERE r.id=$1 ORDER BY b.id',
+        [ride.id],
+      )
+      assert.equal(finalState.rows[0].ride_status, 'CANCELLED')
+      assert.equal(finalState.rows.every(row => row.booking_status === 'CANCELLED'), true)
+      const unavailable = await request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, pendingPassenger.cookie)
       assert.equal(unavailable.response.status, 409)
+    })
+
+    test('serialises a seat request with ride cancellation', async () => {
+      const driver = await register('Concurrent Cancel Driver', `${prefix}concurrent-cancel-driver@example.edu`)
+      const passenger = await register('Concurrent Cancel Passenger', `${prefix}concurrent-cancel-passenger@example.edu`)
+      const ride = await createRide(driver.cookie)
+
+      const [cancelled, bookingRequest] = await Promise.all([
+        request(`/api/rides/${ride.id}/cancel`, { method: 'PATCH' }, driver.cookie),
+        request(`/api/rides/${ride.id}/bookings`, {
+          method: 'POST',
+          body: JSON.stringify({ seats: 1 }),
+        }, passenger.cookie),
+      ])
+
+      assert.equal(cancelled.response.status, 200)
+      assert.ok([201, 409].includes(bookingRequest.response.status))
+      const finalState = await pool.query(
+        "SELECT r.status ride_status,COUNT(b.id) FILTER (WHERE b.status IN ('PENDING','ACCEPTED'))::int active_bookings FROM rides r LEFT JOIN bookings b ON b.ride_id=r.id WHERE r.id=$1 GROUP BY r.id",
+        [ride.id],
+      )
+      assert.equal(finalState.rows[0].ride_status, 'CANCELLED')
+      assert.equal(finalState.rows[0].active_bookings, 0)
     })
 
     test('keeps seat counts consistent under concurrent accepts and booking cancellation', async () => {
