@@ -313,6 +313,46 @@ let base
       assert.equal(driverAccepted.body.offered.find(item => String(item.id) === String(ride.id)).available_seats, 1)
     })
 
+    test('lets a passenger cancel an accepted booking, restores seats, and prevents reacceptance', async () => {
+      const driver = await register('Cancellation Driver', `${prefix}cancellation-driver@example.edu`)
+      const passenger = await register('Cancellation Passenger', `${prefix}cancellation-passenger@example.edu`)
+      const outsider = await register('Cancellation Outsider', `${prefix}cancellation-outsider@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 3 })
+      const requested = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST', body: JSON.stringify({ seats: 2 }),
+      }, passenger.cookie)
+      assert.equal(requested.response.status, 201)
+      const bookingId = requested.body.booking.id
+      const accepted = await request(`/api/bookings/${bookingId}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(accepted.response.status, 200)
+
+      const history = await request('/api/history', {}, passenger.cookie)
+      assert.equal(history.body.rides.find(item => String(item.id) === String(ride.id)).booking_id, bookingId)
+      const forbidden = await request(`/api/bookings/${bookingId}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
+      }, outsider.cookie)
+      assert.equal(forbidden.response.status, 403)
+
+      const cancelled = await request(`/api/bookings/${bookingId}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
+      }, passenger.cookie)
+      assert.equal(cancelled.response.status, 200)
+      assert.equal(cancelled.body.booking.status, 'CANCELLED')
+      const rideState = await pool.query('SELECT available_seats,total_seats FROM rides WHERE id=$1', [ride.id])
+      assert.equal(rideState.rows[0].available_seats, rideState.rows[0].total_seats)
+
+      const reaccept = await request(`/api/bookings/${bookingId}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(reaccept.response.status, 403)
+      const recancel = await request(`/api/bookings/${bookingId}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
+      }, passenger.cookie)
+      assert.equal(recancel.response.status, 409)
+    })
+
     test('runs the complete authorised ride-sharing workflow', async () => {
       const driver = await register('Workflow Driver', `${prefix}workflow-driver@example.edu`)
       const passenger = await register('Workflow Passenger', `${prefix}workflow-passenger@example.edu`)
