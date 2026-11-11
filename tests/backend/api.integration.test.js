@@ -510,30 +510,69 @@ let base
       assert.equal(unavailable.response.status, 409)
     })
 
-    test('serialises acceptance of two requests competing for the final seat', async () => {
+    test('keeps seat counts consistent under concurrent accepts and booking cancellation', async () => {
       const driver = await register('Concurrency Driver', `${prefix}concurrency-driver@example.edu`)
       const passengerA = await register('Concurrency A', `${prefix}concurrency-a@example.edu`)
       const passengerB = await register('Concurrency B', `${prefix}concurrency-b@example.edu`)
-      const ride = await createRide(driver.cookie, { totalSeats: 1 })
-      const [requestA, requestB] = await Promise.all([
+      const passengerC = await register('Concurrency C', `${prefix}concurrency-c@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 2 })
+      const requests = await Promise.all([
         request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, passengerA.cookie),
         request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, passengerB.cookie),
+        request(`/api/rides/${ride.id}/bookings`, { method: 'POST', body: JSON.stringify({ seats: 1 }) }, passengerC.cookie),
       ])
-      assert.equal(requestA.response.status, 201)
-      assert.equal(requestB.response.status, 201)
-      const results = await Promise.all([requestA, requestB].map(item => request(`/api/bookings/${item.body.booking.id}`, {
+      assert.ok(requests.every(item => item.response.status === 201))
+      const results = await Promise.all(requests.map(item => request(`/api/bookings/${item.body.booking.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'ACCEPTED' }),
       }, driver.cookie)))
-      assert.equal(results.filter(item => item.response.status === 200).length, 1)
+      assert.equal(results.filter(item => item.response.status === 200).length, 2)
       assert.equal(results.filter(item => item.response.status === 409).length, 1)
-      const seats = await pool.query('SELECT available_seats FROM rides WHERE id=$1', [ride.id])
-      assert.equal(seats.rows[0].available_seats, 0)
-      const bookings = await pool.query('SELECT id,status FROM bookings WHERE id=ANY($1::bigint[])', [
-        [requestA, requestB].map(item => item.body.booking.id),
+      const saturated = await pool.query(
+        `SELECT r.available_seats,r.total_seats,
+                COUNT(b.id) FILTER (WHERE b.status='ACCEPTED')::int accepted_bookings,
+                COALESCE(SUM(b.seats) FILTER (WHERE b.status='ACCEPTED'),0)::int accepted_seats,
+                COUNT(b.id) FILTER (WHERE b.status='PENDING')::int pending_bookings
+         FROM rides r LEFT JOIN bookings b ON b.ride_id=r.id
+         WHERE r.id=$1 GROUP BY r.id`,
+        [ride.id],
+      )
+      assert.equal(saturated.rows[0].available_seats, 0)
+      assert.equal(saturated.rows[0].accepted_bookings, 2)
+      assert.equal(saturated.rows[0].pending_bookings, 1)
+      assert.equal(saturated.rows[0].available_seats + saturated.rows[0].accepted_seats, saturated.rows[0].total_seats)
+
+      const acceptedIndex = results.findIndex(item => item.response.status === 200)
+      const pendingIndex = results.findIndex(item => item.response.status === 409)
+      const cancellationAndAcceptance = await Promise.all([
+        request(`/api/bookings/${requests[acceptedIndex].body.booking.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'CANCELLED' }),
+        }, [passengerA, passengerB, passengerC][acceptedIndex].cookie),
+        request(`/api/bookings/${requests[pendingIndex].body.booking.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'ACCEPTED' }),
+        }, driver.cookie),
       ])
-      assert.equal(bookings.rows.filter(item => item.status === 'ACCEPTED').length, 1)
-      assert.equal(bookings.rows.filter(item => item.status === 'PENDING').length, 1)
+      assert.equal(cancellationAndAcceptance[0].response.status, 200)
+      assert.ok([200, 409].includes(cancellationAndAcceptance[1].response.status))
+
+      const state = await pool.query(
+        `SELECT r.available_seats,r.total_seats,
+                COUNT(b.id) FILTER (WHERE b.status='ACCEPTED')::int accepted_bookings,
+                COALESCE(SUM(b.seats) FILTER (WHERE b.status='ACCEPTED'),0)::int accepted_seats,
+                COUNT(b.id) FILTER (WHERE b.status='PENDING')::int pending_bookings,
+                COUNT(b.id) FILTER (WHERE b.status='CANCELLED')::int cancelled_bookings
+         FROM rides r LEFT JOIN bookings b ON b.ride_id=r.id
+         WHERE r.id=$1 GROUP BY r.id`,
+        [ride.id],
+      )
+      const final = state.rows[0]
+      assert.ok(final.available_seats >= 0)
+      assert.ok(final.available_seats <= final.total_seats)
+      assert.equal(final.available_seats + final.accepted_seats, final.total_seats)
+      assert.equal(final.cancelled_bookings, 1)
+      assert.equal(final.accepted_bookings + final.pending_bookings, 2)
     })
 
     test('rejects empty messages and invalid ratings', async () => {

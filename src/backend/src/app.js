@@ -147,13 +147,27 @@ app.get('/api/dashboard', auth, asyncRoute(async (req,res) => {
 app.post('/api/rides/:id/bookings', auth, asyncRoute(async (req,res) => {
   const rideId=Number(req.params.id), count=Number(req.body.seats)
   if (!Number.isInteger(rideId)||!Number.isInteger(count)||count<1||count>8) throw fail(400,'VALIDATION_ERROR','Invalid ride or seat count.')
-  try { const {rows:[booking]}=await pool.query(`INSERT INTO bookings(ride_id,passenger_id,seats) SELECT id,$2,$3 FROM rides WHERE id=$1 AND driver_id<>$2 AND status='OPEN' AND departure_at>now() AND available_seats >= $3 AND NOT EXISTS(SELECT 1 FROM bookings WHERE ride_id=$1 AND passenger_id=$2 AND status IN ('PENDING','ACCEPTED')) RETURNING *`,[rideId,req.session.user.id,count]); if(!booking) throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.'); res.status(201).json({booking}) } catch(e){ if(e.status) throw e; if(e.code==='23505') throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.'); throw e }
+  const client=await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const {rows:[ride]}=await client.query('SELECT * FROM rides WHERE id=$1 FOR UPDATE',[rideId])
+    if(!ride||String(ride.driver_id)===String(req.session.user.id)||ride.status!=='OPEN'||ride.departure_at<=new Date()||ride.available_seats<count) throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.')
+    const {rows:[booking]}=await client.query(`INSERT INTO bookings(ride_id,passenger_id,seats) SELECT $1,$2,$3 WHERE NOT EXISTS(SELECT 1 FROM bookings WHERE ride_id=$1 AND passenger_id=$2 AND status IN ('PENDING','ACCEPTED')) RETURNING *`,[rideId,req.session.user.id,count])
+    if(!booking) throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.')
+    await client.query('COMMIT')
+    res.status(201).json({booking})
+  } catch(e) {
+    await client.query('ROLLBACK')
+    if(e.status) throw e
+    if(e.code==='23505') throw fail(409,'RIDE_UNAVAILABLE','Ride is unavailable or you already have an active request.')
+    throw e
+  } finally { client.release() }
 }))
 app.patch('/api/bookings/:id', auth, asyncRoute(async (req,res) => {
   const status=String(req.body.status||''); if(!['ACCEPTED','REJECTED','CANCELLED','COMPLETED'].includes(status)) throw fail(400,'VALIDATION_ERROR','Invalid booking status.')
-  const client=await pool.connect(); try { await client.query('BEGIN'); const {rows:[b]}=await client.query('SELECT b.*,r.driver_id,r.status ride_status,r.available_seats,r.departure_at FROM bookings b JOIN rides r ON r.id=b.ride_id WHERE b.id=$1 FOR UPDATE OF b', [req.params.id]); if(!b) throw fail(404,'NOT_FOUND','Booking not found.')
+  const client=await pool.connect(); try { await client.query('BEGIN'); const {rows:[reference]}=await client.query('SELECT ride_id FROM bookings WHERE id=$1',[req.params.id]); if(!reference) throw fail(404,'NOT_FOUND','Booking not found.'); const {rows:[ride]}=await client.query('SELECT * FROM rides WHERE id=$1 FOR UPDATE',[reference.ride_id]); const {rows:[b]}=await client.query('SELECT b.*,r.driver_id,r.status ride_status,r.available_seats,r.departure_at FROM bookings b JOIN rides r ON r.id=b.ride_id WHERE b.id=$1 FOR UPDATE OF b',[req.params.id]); if(!b) throw fail(404,'NOT_FOUND','Booking not found.')
     const me=req.session.user.id, isDriver=String(b.driver_id)===String(me), isPassenger=String(b.passenger_id)===String(me)
-    if(status==='ACCEPTED') { if(!isDriver||b.status!=='PENDING') throw fail(403,'FORBIDDEN','Only the ride owner can accept a pending request.'); const {rows:[ride]}=await client.query('SELECT * FROM rides WHERE id=$1 FOR UPDATE',[b.ride_id]); if(ride.status!=='OPEN'||ride.departure_at<=new Date()||ride.available_seats < b.seats) throw fail(409,'SEATS_UNAVAILABLE','Not enough seats remain or the ride is no longer available.'); await client.query('UPDATE rides SET available_seats=available_seats-$1, updated_at=now() WHERE id=$2',[b.seats,b.ride_id]) }
+    if(status==='ACCEPTED') { if(!isDriver||b.status!=='PENDING') throw fail(403,'FORBIDDEN','Only the ride owner can accept a pending request.'); if(ride.status!=='OPEN'||ride.departure_at<=new Date()||ride.available_seats < b.seats) throw fail(409,'SEATS_UNAVAILABLE','Not enough seats remain or the ride is no longer available.'); await client.query('UPDATE rides SET available_seats=available_seats-$1, updated_at=now() WHERE id=$2',[b.seats,b.ride_id]) }
     else if(status==='REJECTED') { if(!isDriver||b.status!=='PENDING') throw fail(403,'FORBIDDEN','Only the ride owner can reject a pending request.') }
     else if(status==='CANCELLED') { if(!isDriver&&!isPassenger) throw fail(403,'FORBIDDEN','Only participants can cancel.'); if(!['PENDING','ACCEPTED'].includes(b.status)) throw fail(409,'INVALID_STATE','This booking cannot be cancelled.'); if(b.status==='ACCEPTED') await client.query('UPDATE rides SET available_seats=LEAST(total_seats,available_seats+$1),updated_at=now() WHERE id=$2',[b.seats,b.ride_id]) }
     else if(status==='COMPLETED') { if(!isDriver||b.status!=='ACCEPTED'||new Date(b.departure_at)>new Date()) throw fail(403,'FORBIDDEN','The ride owner can complete an accepted booking after departure.') }
@@ -166,7 +180,21 @@ app.post('/api/rides/:id/messages', auth, asyncRoute(async(req,res)=>{ const bod
 app.post('/api/ratings', auth, asyncRoute(async(req,res)=>{ const rideId=Number(req.body.rideId), ratee=Number(req.body.rateeId), stars=Number(req.body.stars); if(!Number.isInteger(stars)||stars<1||stars>5||String(ratee)===String(req.session.user.id)) throw fail(400,'VALIDATION_ERROR','Rating must be 1–5 stars for another participant.'); const {rows:[eligible]}=await pool.query(`SELECT r.driver_id,b.passenger_id FROM rides r JOIN bookings b ON b.ride_id=r.id WHERE r.id=$1 AND b.status='COMPLETED' AND r.departure_at<now() AND (($2=r.driver_id AND $3=b.passenger_id) OR ($3=r.driver_id AND $2=b.passenger_id))`,[rideId,req.session.user.id,ratee]); if(!eligible) throw fail(403,'FORBIDDEN','Only participants may rate each other after a completed ride.'); const {rows:[rating]}=await pool.query('INSERT INTO ratings(ride_id,rater_id,ratee_id,stars,review) VALUES($1,$2,$3,$4,$5) RETURNING *',[rideId,req.session.user.id,ratee,stars,String(req.body.review||'').slice(0,500)]); res.status(201).json({rating}) }))
 app.get('/api/history', auth, asyncRoute(async(req,res)=>{ const {rows}=await pool.query(`SELECT r.*, 'DRIVER' AS role,b.status booking_status,b.passenger_id counterpart_id,u.name counterpart_name FROM rides r LEFT JOIN bookings b ON b.ride_id=r.id LEFT JOIN users u ON u.id=b.passenger_id WHERE r.driver_id=$1 UNION ALL SELECT r.*, 'PASSENGER' AS role,b.status booking_status,r.driver_id counterpart_id,u.name counterpart_name FROM rides r JOIN bookings b ON b.ride_id=r.id JOIN users u ON u.id=r.driver_id WHERE b.passenger_id=$1 ORDER BY departure_at DESC LIMIT 100`,[req.session.user.id]); res.json({rides:rows}) }))
 app.get('/api/rides/:id/bookings',auth,asyncRoute(async(req,res)=>{ const {rows:[ride]}=await pool.query('SELECT driver_id FROM rides WHERE id=$1',[req.params.id]); if(!ride) throw fail(404,'NOT_FOUND','Ride not found.'); if(String(ride.driver_id)!==String(req.session.user.id)) throw fail(403,'FORBIDDEN','Only the ride owner can manage requests.'); const {rows}=await pool.query('SELECT b.*,u.name passenger_name FROM bookings b JOIN users u ON u.id=b.passenger_id WHERE ride_id=$1 ORDER BY created_at DESC',[req.params.id]); res.json({bookings:rows}) }))
-app.patch('/api/rides/:id/cancel',auth,asyncRoute(async(req,res)=>{const {rows:[ride]}=await pool.query("UPDATE rides SET status='CANCELLED',updated_at=now() WHERE id=$1 AND driver_id=$2 AND status='OPEN' RETURNING *",[req.params.id,req.session.user.id]);if(!ride)throw fail(404,'NOT_FOUND','Open ride not found.');await pool.query("UPDATE bookings SET status='CANCELLED',updated_at=now() WHERE ride_id=$1 AND status IN ('PENDING','ACCEPTED')",[ride.id]);res.json({ride})}))
+app.patch('/api/rides/:id/cancel',auth,asyncRoute(async(req,res)=>{
+  const client=await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const {rows:[ride]}=await client.query("SELECT * FROM rides WHERE id=$1 AND driver_id=$2 AND status='OPEN' FOR UPDATE",[req.params.id,req.session.user.id])
+    if(!ride) throw fail(404,'NOT_FOUND','Open ride not found.')
+    const {rows:[cancelledRide]}=await client.query("UPDATE rides SET status='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *",[ride.id])
+    await client.query("UPDATE bookings SET status='CANCELLED',updated_at=now() WHERE ride_id=$1 AND status IN ('PENDING','ACCEPTED')",[ride.id])
+    await client.query('COMMIT')
+    res.json({ride:cancelledRide})
+  } catch(e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally { client.release() }
+}))
 
 app.use((req,res)=>res.status(404).json({error:{code:'NOT_FOUND',message:`Route not found: ${req.method} ${req.path}`}}))
 app.use((err,_req,res,_next)=>{
