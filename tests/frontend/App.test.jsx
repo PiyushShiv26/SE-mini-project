@@ -250,4 +250,32 @@ describe('authentication screens', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/ride cancelled/i)
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/rides/ride-2/cancel') && options.method === 'PATCH')).toBe(true)
   })
+
+  it('lets a passenger cancel an active booking from ride history', async () => {
+    let bookingStatus = 'ACCEPTED'
+    const ride = { id: 'ride-3', booking_id: 'booking-3', role: 'PASSENGER', booking_status: bookingStatus, counterpart_id: '22', counterpart_name: 'Driver Student', pickup: 'PES', destination: 'Metro', departure_at: '2035-01-01T10:00:00Z', available_seats: 0, total_seats: 1 }
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '11', name: 'Passenger Student', email: 'passenger@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      if (url.endsWith('/history')) return { ok: true, json: async () => ({ rides: [{ ...ride, booking_status: bookingStatus }] }) }
+      if (url.endsWith('/bookings/booking-3') && options.method === 'PATCH') {
+        bookingStatus = 'CANCELLED'
+        return { ok: true, json: async () => ({ booking: { id: 'booking-3', status: bookingStatus } }) }
+      }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, passenger/i })
+    fireEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: /ride history/i }))
+    expect(await screen.findByText(/you joined this ride · accepted/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /cancel booking/i }))
+
+    expect(await screen.findByText(/you joined this ride · cancelled/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cancel booking/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent(/booking cancelled/i)
+    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/bookings/booking-3') && options.method === 'PATCH' && JSON.parse(options.body).status === 'CANCELLED')).toBe(true)
+  })
 })
