@@ -619,6 +619,56 @@ let base
       assert.equal(final.accepted_bookings + final.pending_bookings, 2)
     })
 
+    test('allows only the driver and accepted passengers to message each other', async () => {
+      const driver = await register('Messaging Driver', `${prefix}messaging-driver@example.edu`)
+      const passenger = await register('Messaging Passenger', `${prefix}messaging-passenger@example.edu`)
+      const pendingPassenger = await register('Pending Messaging Passenger', `${prefix}messaging-pending@example.edu`)
+      const outsider = await register('Messaging Outsider', `${prefix}messaging-outsider@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 2 })
+      const acceptedRequest = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST', body: JSON.stringify({ seats: 1 }),
+      }, passenger.cookie)
+      const pendingRequest = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST', body: JSON.stringify({ seats: 1 }),
+      }, pendingPassenger.cookie)
+      assert.equal(acceptedRequest.response.status, 201)
+      assert.equal(pendingRequest.response.status, 201)
+      const accepted = await request(`/api/bookings/${acceptedRequest.body.booking.id}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(accepted.response.status, 200)
+
+      const driverMessage = await request(`/api/rides/${ride.id}/messages`, {
+        method: 'POST', body: JSON.stringify({ body: 'Pickup is by the library.' }),
+      }, driver.cookie)
+      assert.equal(driverMessage.response.status, 201)
+      const passengerRead = await request(`/api/rides/${ride.id}/messages`, {}, passenger.cookie)
+      assert.deepEqual(passengerRead.body.messages.map(message => message.body), ['Pickup is by the library.'])
+
+      const passengerMessage = await request(`/api/rides/${ride.id}/messages`, {
+        method: 'POST', body: JSON.stringify({ body: 'I will be there on time.' }),
+      }, passenger.cookie)
+      assert.equal(passengerMessage.response.status, 201)
+      const driverRead = await request(`/api/rides/${ride.id}/messages`, {}, driver.cookie)
+      assert.deepEqual(driverRead.body.messages.map(message => message.body), [
+        'Pickup is by the library.', 'I will be there on time.',
+      ])
+
+      for (const user of [pendingPassenger, outsider]) {
+        const send = await request(`/api/rides/${ride.id}/messages`, {
+          method: 'POST', body: JSON.stringify({ body: 'Can you hear me?' }),
+        }, user.cookie)
+        const read = await request(`/api/rides/${ride.id}/messages`, {}, user.cookie)
+        assert.equal(send.response.status, 403)
+        assert.equal(read.response.status, 403)
+      }
+      const conversations = await request('/api/conversations', {}, pendingPassenger.cookie)
+      assert.equal(conversations.response.status, 200)
+      assert.equal(conversations.body.conversations.some(item => String(item.ride_id) === String(ride.id)), false)
+      const latest = await request('/api/conversations', {}, driver.cookie)
+      assert.equal(latest.body.conversations.find(item => String(item.ride_id) === String(ride.id)).last_message, 'I will be there on time.')
+    })
+
     test('rejects empty messages and invalid ratings', async () => {
       const user = await register('Message User', `${prefix}message-user@example.edu`)
       const empty = await request('/api/rides/999999/messages', { method: 'POST', body: JSON.stringify({ body: '' }) }, user.cookie)
