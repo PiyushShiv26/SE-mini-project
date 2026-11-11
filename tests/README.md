@@ -5,6 +5,7 @@
 - `tests/frontend/App.test.jsx` — public landing/authentication screens, successful registration and login, duplicate registration, password confirmation, browser back/forward navigation, and ride creation request payload.
 - `tests/backend/health.test.js` — HTTP health response and protected-route authentication guards. These run without database writes.
 - `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
+- `tests/system/system-validation.test.js` — starts the backend and Vite frontend together, verifies the frontend and `/api` proxy, then exercises a database-backed ride request, acceptance, dashboard, and messaging flow.
 
 No test is marked skipped. The database integration command fails before executing tests if its test database URL is missing or does not name a database ending in `_test`.
 
@@ -46,9 +47,21 @@ Remove-Item Env:NODE_ENV
 
 Replace `YOUR_PASSWORD` with your local PostgreSQL password. The integration test loads `.env` only to compare the configured development URL against `DATABASE_URL_TEST`, then connects the test app exclusively to `DATABASE_URL_TEST`. It refuses to run if the two URLs match or if the test database name does not end in `_test`. It does not silently pass when the test URL is absent.
 
+## System validation
+
+The system suite starts Vite with the `/api` proxy pointed at the test backend, then sends requests through the frontend origin to validate the connected application. From `src\backend`, set the same dedicated `_test` database URL as above and run:
+
+```powershell
+$env:DATABASE_URL_TEST = 'postgresql://postgres:YOUR_PASSWORD@localhost:5432/campus_rides_test'
+$env:NODE_ENV = 'test'
+npm run test:system
+Remove-Item Env:DATABASE_URL_TEST
+Remove-Item Env:NODE_ENV
+```
+
 ## CI
 
-`.github/workflows/ci.yml` runs lint, frontend tests, build, backend unit/HTTP tests, and the integration suite against a dedicated ephemeral `campus_rides_test` PostgreSQL service. The integration step receives `DATABASE_URL_TEST` explicitly, so CI cannot silently skip those checks.
+`.github/workflows/ci.yml` runs lint, frontend tests, build, backend unit/HTTP tests, the integration suite, and system validation against a dedicated ephemeral `campus_rides_test` PostgreSQL service. Database-backed steps receive `DATABASE_URL_TEST` explicitly, so CI cannot silently skip those checks.
 
 ## Audit findings and reproduction
 

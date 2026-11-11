@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "test": "node --test ../../tests/backend/health.test.js",
     "test:integration": "node --test ../../tests/backend/api.integration.test.js",
+    "test:system": "node --test ../../tests/system/system-validation.test.js",
     "db:migrate": "node src/migrate.js",
     "db:seed": "node src/seed.js"
   },
