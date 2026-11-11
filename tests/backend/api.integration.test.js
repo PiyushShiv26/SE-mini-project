@@ -247,6 +247,72 @@ let base
   })
 
   describe('rides, bookings, messaging, and history', () => {
+    test('filters public ride search by route, date, and available seats', async () => {
+      const driver = await register('Search Driver', `${prefix}search-driver@example.edu`)
+      const targetDeparture = new Date(Date.now() + 2 * 86400000)
+      const otherDeparture = new Date(Date.now() + 3 * 86400000)
+      targetDeparture.setUTCHours(12, 0, 0, 0)
+      otherDeparture.setUTCHours(12, 0, 0, 0)
+      const target = await createRide(driver.cookie, {
+        pickup: 'PES University',
+        destination: 'Tech Park',
+        departureAt: targetDeparture.toISOString(),
+        totalSeats: 3,
+      })
+      await createRide(driver.cookie, {
+        pickup: 'PES University',
+        destination: 'Tech Park',
+        departureAt: targetDeparture.toISOString(),
+        totalSeats: 1,
+      })
+      await createRide(driver.cookie, {
+        pickup: 'PES University',
+        destination: 'Tech Park',
+        departureAt: otherDeparture.toISOString(),
+        totalSeats: 3,
+      })
+
+      const matching = await request(`/api/rides?q=tech&date=${targetDeparture.toISOString().slice(0, 10)}&seats=2`)
+      assert.equal(matching.response.status, 200)
+      assert.deepEqual(matching.body.rides.map(ride => String(ride.id)), [String(target.id)])
+
+      const duplicateFilter = await request('/api/rides?seats=1&seats=2')
+      assert.equal(duplicateFilter.response.status, 400)
+      assert.equal(duplicateFilter.body.error.code, 'VALIDATION_ERROR')
+    })
+
+    test('shows consistent pending and accepted booking state on both dashboards', async () => {
+      const driver = await register('Dashboard Driver', `${prefix}dashboard-driver@example.edu`)
+      const passenger = await register('Dashboard Passenger', `${prefix}dashboard-passenger@example.edu`)
+      const ride = await createRide(driver.cookie, { totalSeats: 2 })
+      const requested = await request(`/api/rides/${ride.id}/bookings`, {
+        method: 'POST',
+        body: JSON.stringify({ seats: 1 }),
+      }, passenger.cookie)
+      assert.equal(requested.response.status, 201)
+
+      const [driverPending, passengerPending] = await Promise.all([
+        request('/api/dashboard', {}, driver.cookie),
+        request('/api/dashboard', {}, passenger.cookie),
+      ])
+      assert.equal(driverPending.body.requests.find(item => String(item.ride_id) === String(ride.id)).status, 'PENDING')
+      assert.equal(passengerPending.body.bookings.find(item => String(item.ride_id) === String(ride.id)).status, 'PENDING')
+
+      const accepted = await request(`/api/bookings/${requested.body.booking.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ACCEPTED' }),
+      }, driver.cookie)
+      assert.equal(accepted.response.status, 200)
+
+      const [driverAccepted, passengerAccepted] = await Promise.all([
+        request('/api/dashboard', {}, driver.cookie),
+        request('/api/dashboard', {}, passenger.cookie),
+      ])
+      assert.equal(driverAccepted.body.requests.find(item => String(item.ride_id) === String(ride.id)).status, 'ACCEPTED')
+      assert.equal(passengerAccepted.body.bookings.find(item => String(item.ride_id) === String(ride.id)).status, 'ACCEPTED')
+      assert.equal(driverAccepted.body.offered.find(item => String(item.id) === String(ride.id)).available_seats, 1)
+    })
+
     test('runs the complete authorised ride-sharing workflow', async () => {
       const driver = await register('Workflow Driver', `${prefix}workflow-driver@example.edu`)
       const passenger = await register('Workflow Passenger', `${prefix}workflow-passenger@example.edu`)
