@@ -4,7 +4,7 @@
 
 - `tests/frontend/App.test.jsx` — public landing/authentication screens, successful registration and login, duplicate registration, password confirmation, browser back/forward navigation, and ride creation request payload.
 - `tests/backend/health.test.js` — HTTP health response and protected-route authentication guards. These run without database writes.
-- `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
+- `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, filtered ride search, dashboard consistency, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
 
 No test is marked skipped. The database integration command fails before executing tests if its test database URL is missing or does not name a database ending in `_test`.
 
