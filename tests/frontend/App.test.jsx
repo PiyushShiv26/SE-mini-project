@@ -251,6 +251,28 @@ describe('authentication screens', () => {
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/rides/ride-2/cancel') && options.method === 'PATCH')).toBe(true)
   })
 
+  it('loads a participant conversation and sends a message', async () => {
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '22', name: 'Passenger Student', email: 'passenger@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      if (url.endsWith('/conversations')) return { ok: true, json: async () => ({ conversations: [{ ride_id: 'ride-4', participant_name: 'Driver Student', pickup: 'PES', destination: 'Metro', last_message: 'See you soon.' }] }) }
+      if (url.endsWith('/rides/ride-4/messages') && options.method === 'POST') return { ok: true, status: 201, json: async () => ({ message: { id: 'message-2', sender_id: '22', sender_name: 'Passenger Student', body: JSON.parse(options.body).body, created_at: '2035-01-01T09:00:00Z' } }) }
+      if (url.endsWith('/rides/ride-4/messages')) return { ok: true, json: async () => ({ messages: [{ id: 'message-1', sender_id: '21', sender_name: 'Driver Student', body: 'See you soon.', created_at: '2035-01-01T08:00:00Z' }] }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, passenger/i })
+    fireEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: /messages/i }))
+    expect(await screen.findByText('See you soon.')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: /message/i }), { target: { value: 'I am on my way.' } })
+    fireEvent.click(screen.getByRole('button', { name: /send/i }))
+
+    expect(await screen.findByText('I am on my way.')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/rides/ride-4/messages') && options.method === 'POST' && JSON.parse(options.body).body === 'I am on my way.')).toBe(true)
+  })
+
   it('lets a passenger cancel an active booking from ride history', async () => {
     let bookingStatus = 'ACCEPTED'
     const ride = { id: 'ride-3', booking_id: 'booking-3', role: 'PASSENGER', booking_status: bookingStatus, counterpart_id: '22', counterpart_name: 'Driver Student', pickup: 'PES', destination: 'Metro', departure_at: '2035-01-01T10:00:00Z', available_seats: 0, total_seats: 1 }
