@@ -22,11 +22,14 @@ Frontend component and navigation behaviors were exercised with Vitest, React Te
 
 The frontend run recorded statement coverage 82.75%, branch coverage 86.69%, function coverage 71.90%, and line coverage 93.61%; see the separate CR-23 and CR-24 reports. The backend HTTP run reported 2 passed, 0 failed, 0 skipped. No executed test failed. The integration command's nonzero exit is an environment precondition failure, not a test assertion failure; it confirms that no database-backed test ran locally.
 
+## Pull request CI
+
+GitHub Actions run [43159588374](https://github.com/PiyushShiv26/SE-mini-project/actions/runs/43159588374) for PR #28 completed successfully. The CI job passed frontend dependency installation, lint, frontend tests, production build, backend dependency installation, backend HTTP tests, PostgreSQL integration tests, and full system validation. This supplies the database-backed evidence that was unavailable in the local environment.
+
 ## Environment and reproduction
 
 Install dependencies using `npm ci` in both `src/frontend` and `src/backend`. Run the unit commands above from their respective directories. To execute integration and system suites, configure `NODE_ENV=test`, `SESSION_SECRET`, and `DATABASE_URL_TEST` for a dedicated local database named `campus_rides_test`; see [`tests/README.md`](../../tests/README.md) for PowerShell setup commands and safety checks. GitHub Actions provisions this database as a PostgreSQL service for pull requests.
 
-## Remaining issues
+## Remaining issue
 
-- Local database-backed integration and full system results are pending CI evidence because PostgreSQL and a dedicated test database were unavailable in this environment.
-- GitHub Actions must pass on the report pull request before this report can claim complete verification.
+- The local machine still lacks the dedicated PostgreSQL test database, so the database-backed suites are verified by CI rather than locally.
