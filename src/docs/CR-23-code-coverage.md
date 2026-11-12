@@ -14,7 +14,7 @@ npm ci
 npm run test:coverage
 ```
 
-Vitest runs the frontend tests and collects V8 coverage for `src/frontend/src/**/*.{js,jsx}`. The command prints a text summary and writes machine-readable JSON and HTML reports under `src/frontend/coverage/frontend/`. The report includes all frontend source files, including entry points that are not imported by unit tests.
+Vitest runs the frontend tests and collects V8 coverage for `src/frontend/src/**/*.{js,jsx}`. The command prints a text summary and writes machine-readable JSON and HTML reports under the repository-root `coverage/frontend/` directory. The report includes all frontend source files, including entry points that are not imported by unit tests.
 
 ## Results
 
