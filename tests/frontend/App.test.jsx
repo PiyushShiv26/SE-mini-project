@@ -347,7 +347,7 @@ describe('authentication screens', () => {
     await screen.findByRole('heading', { name: /good morning, dashboard/i })
 
     const upcomingStat = screen.getByText('UPCOMING RIDES').parentElement
-    expect(within(upcomingStat).getByText('2')).toBeInTheDocument()
+    expect(await within(upcomingStat).findByText('2')).toBeInTheDocument()
     expect(screen.getByText('Accepted passenger seat')).toBeInTheDocument()
     expect(screen.getByText('You are driving')).toBeInTheDocument()
     expect(screen.getByText('Metro')).toBeInTheDocument()
