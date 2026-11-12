@@ -300,4 +300,31 @@ describe('authentication screens', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/booking cancelled/i)
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/bookings/booking-3') && options.method === 'PATCH' && JSON.parse(options.body).status === 'CANCELLED')).toBe(true)
   })
+
+  it('lets a participant rate a completed ride and shows the saved review afterward', async () => {
+    const ride = { id: 'completed-ride', role: 'PASSENGER', booking_status: 'COMPLETED', counterpart_id: '22', counterpart_name: 'Driver Student', pickup: 'PES', destination: 'Metro', departure_at: '2020-01-01T10:00:00Z', available_seats: 0, total_seats: 1, counterpart_rating: '4.5' }
+    const fetchMock = vi.fn(async (url, options = {}) => {
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '11', name: 'Passenger Student', email: 'passenger@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({ offered: [], bookings: [], requests: [] }) }
+      if (url.endsWith('/history')) return { ok: true, json: async () => ({ rides: [ride] }) }
+      if (url.endsWith('/ratings') && options.method === 'POST') return { ok: true, status: 201, json: async () => ({ rating: { stars: 5, review: 'Friendly and on time.' } }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, passenger/i })
+    fireEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: /ride history/i }))
+    expect(await screen.findByText('Participant rating: ★ 4.5')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Rate Driver Student' }))
+    fireEvent.change(screen.getByLabelText('Rating'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('Review'), { target: { value: 'Friendly and on time.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Rating submitted.')
+    expect(screen.getByLabelText('Your submitted review')).toHaveTextContent('Your rating: ★ 5 / 5')
+    expect(screen.getByLabelText('Your submitted review')).toHaveTextContent('Friendly and on time.')
+    expect(screen.queryByRole('button', { name: 'Rate Driver Student' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/ratings') && options.method === 'POST' && JSON.parse(options.body).review === 'Friendly and on time.')).toBe(true)
+  })
 })
