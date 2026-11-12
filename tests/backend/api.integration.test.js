@@ -740,6 +740,13 @@ let base
         body: JSON.stringify({ rideId: ride.id, rateeId: driver.body.user.id, stars: 4 }),
       }, passenger.cookie)
       assert.equal(duplicate.response.status, 409)
+      assert.equal(duplicate.body.error.code, 'RATING_EXISTS')
+      assert.match(duplicate.body.error.message, /already rated/i)
+      const history = await request('/api/history', {}, passenger.cookie)
+      const ratedRide = history.body.rides.find(item => String(item.id) === String(ride.id))
+      assert.equal(ratedRide.my_rating_stars, 5)
+      assert.equal(ratedRide.my_rating_review, 'Great ride.')
+      assert.equal(Number(ratedRide.counterpart_rating), 5)
       const selfRating = await request('/api/ratings', {
         method: 'POST',
         body: JSON.stringify({ rideId: ride.id, rateeId: passenger.body.user.id, stars: 5 }),
