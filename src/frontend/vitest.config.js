@@ -24,5 +24,17 @@ export default defineConfig({
     pool: 'forks',
     maxWorkers: 1,
     minWorkers: 1,
+    coverage: {
+      provider: 'v8',
+      include: ['src/frontend/src/**/*.{js,jsx}'],
+      reporter: ['text', 'json-summary', 'html'],
+      reportsDirectory: 'coverage/frontend',
+      thresholds: {
+        statements: 0,
+        branches: 0,
+        functions: 0,
+        lines: 0,
+      },
+    },
   },
 })
