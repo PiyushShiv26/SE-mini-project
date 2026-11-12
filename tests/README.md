@@ -21,6 +21,8 @@ npm test
 npm run build
 ```
 
+To run the same frontend suite with V8 code coverage, use `npm run test:coverage` from `src/frontend`. It prints statement, branch, function, and line totals and writes JSON and HTML artifacts to the ignored `coverage/frontend/` directory at the repository root. See [`src/docs/CR-23-code-coverage.md`](../src/docs/CR-23-code-coverage.md) for the recorded run.
+
 ## Backend unit/HTTP tests
 
 These use an ephemeral local HTTP port but do not make database writes:
