@@ -139,8 +139,8 @@ app.get('/api/rides/mine', auth, asyncRoute(async (req, res) => { const { rows }
 app.get('/api/dashboard', auth, asyncRoute(async (req,res) => {
   const id=req.session.user.id
   const [offered, bookings, activity] = await Promise.all([
-    pool.query('SELECT * FROM rides WHERE driver_id=$1 AND departure_at>now() ORDER BY departure_at LIMIT 5',[id]),
-    pool.query('SELECT b.*,r.pickup,r.destination,r.departure_at,r.driver_id,u.name driver_name FROM bookings b JOIN rides r ON r.id=b.ride_id JOIN users u ON u.id=r.driver_id WHERE b.passenger_id=$1 ORDER BY b.created_at DESC LIMIT 10',[id]),
+    pool.query("SELECT * FROM rides WHERE driver_id=$1 AND status='OPEN' AND departure_at>now() ORDER BY departure_at LIMIT 5",[id]),
+    pool.query('SELECT b.*,r.pickup,r.destination,r.departure_at,r.total_seats,r.available_seats,r.notes,r.driver_id,u.name driver_name FROM bookings b JOIN rides r ON r.id=b.ride_id JOIN users u ON u.id=r.driver_id WHERE b.passenger_id=$1 ORDER BY b.created_at DESC LIMIT 10',[id]),
     pool.query(`SELECT b.*,r.pickup,r.destination,r.departure_at,u.name passenger_name FROM bookings b JOIN rides r ON r.id=b.ride_id JOIN users u ON u.id=b.passenger_id WHERE r.driver_id=$1 ORDER BY b.created_at DESC LIMIT 10`,[id])
   ]); res.json({offered:offered.rows,bookings:bookings.rows,requests:activity.rows})
 }))

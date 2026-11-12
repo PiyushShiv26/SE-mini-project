@@ -327,4 +327,31 @@ describe('authentication screens', () => {
     expect(screen.queryByRole('button', { name: 'Rate Driver Student' })).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/ratings') && options.method === 'POST' && JSON.parse(options.body).review === 'Friendly and on time.')).toBe(true)
   })
+
+  it('includes accepted passenger rides in dashboard history and excludes pending or past rides', async () => {
+    const fetchMock = vi.fn(async url => {
+      if (url.endsWith('/me')) return { ok: true, json: async () => ({ user: { id: '31', name: 'Dashboard Student', email: 'dashboard@example.edu' } }) }
+      if (url.endsWith('/dashboard')) return { ok: true, json: async () => ({
+        offered: [{ id: 'driver-ride', pickup: 'Campus', destination: 'Library', departure_at: '2035-02-02T10:00:00Z', total_seats: 2, available_seats: 2, status: 'OPEN' }],
+        bookings: [
+          { id: 'booking-1', ride_id: 'passenger-ride', status: 'ACCEPTED', seats: 2, pickup: 'Campus', destination: 'Metro', departure_at: '2035-02-01T10:00:00Z', total_seats: 3, available_seats: 1, driver_name: 'Driver Student' },
+          { id: 'booking-2', ride_id: 'pending-ride', status: 'PENDING', seats: 1, pickup: 'Campus', destination: 'Park', departure_at: '2035-02-03T10:00:00Z', total_seats: 2, available_seats: 2, driver_name: 'Other Driver' },
+          { id: 'booking-3', ride_id: 'past-ride', status: 'ACCEPTED', seats: 1, pickup: 'Campus', destination: 'Station', departure_at: '2020-02-03T10:00:00Z', total_seats: 2, available_seats: 1, driver_name: 'Past Driver' },
+        ], requests: [],
+      }) }
+      return { ok: true, json: async () => ({ rides: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await screen.findByRole('heading', { name: /good morning, dashboard/i })
+
+    const upcomingStat = screen.getByText('UPCOMING RIDES').parentElement
+    expect(within(upcomingStat).getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('Accepted passenger seat')).toBeInTheDocument()
+    expect(screen.getByText('You are driving')).toBeInTheDocument()
+    expect(screen.getByText('Metro')).toBeInTheDocument()
+    expect(screen.queryByText('Park')).not.toBeInTheDocument()
+    expect(screen.queryByText('Station')).not.toBeInTheDocument()
+  })
 })
