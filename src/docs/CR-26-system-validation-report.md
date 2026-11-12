@@ -18,7 +18,7 @@ The STP calls for system testing of the connected frontend, Express API, session
 | --- | --- | --- | --- |
 | TC-01 / FR-01 | Register valid driver and passenger accounts; receive 201 and session cookies | **Passed in CI:** system workflow registered both accounts and verified their session cookies. Integration suite also passed invalid/duplicate-registration cases. | Pass |
 | TC-04 / FR-04 | Create a future ride with a valid route and capacity; receive 201 | **Passed in CI:** system workflow created a future ride; integration suite passed ride input validation cases. | Pass |
-| TC-07 / FR-07 | Passenger requests a seat; request is created as pending | **Passed in CI:** system workflow created the booking; integration suite passed booking validation and capacity cases. | Pass |
+| TC-07 / FR-07 | Passenger requests a seat; request is created as pending | **Passed in CI:** system workflow created the booking; integration suite verified pending-state behavior and capacity handling. | Pass |
 | TC-08 / FR-08 | Ride owner accepts the request; booking becomes accepted and one seat is reserved | **Passed in CI:** status became `ACCEPTED`, dashboard state matched, and available seats decreased from two to one. | Pass |
 | TC-10 / FR-10 | Driver and passenger dashboards show their respective ride/request data | **Passed in CI:** both dashboards contained the expected ride/booking and status. | Pass |
 | TC-11 / FR-11 | Participant sends a message; the other participant can read it | **Passed in CI:** the driver retrieved the passenger's message; integration suite also passed messaging authorization cases. | Pass |
