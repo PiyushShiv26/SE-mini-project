@@ -4,7 +4,8 @@
 **Branch:** `test/CR-26-system-validation-report`  
 **Build under validation:** `main` at `d78f82c`  
 **Plan:** `src/docs/Team12_Campus_RideShare_STP.docx`, test procedures TC-01, TC-04, TC-07, TC-08, TC-10, TC-11, and TC-15  
-**Local environment:** Windows 11; Node.js v22.19.0  
+**Local environment:** Windows 11; Node.js v22.19.0
+
 **CI environment:** Ubuntu 26.04; Node.js v22.23.4; PostgreSQL 16.15 service with isolated `campus_rides_test`
 
 ## Scope and approach
