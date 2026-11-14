@@ -86,5 +86,5 @@ As of this branch, feature development is frozen for final evaluation. Only rele
 - [ ] Final branch merged to `main` after required review.
 
 **Implementation baseline:** `efbb5f5`
-**Final CR-31 commit:** recorded by Git in the PR after this document and the verified changes are committed.
+**Final CR-31 implementation commit:** `8756f86`
 **Branch:** `chore/CR-31-final-evaluation-readiness`
