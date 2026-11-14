@@ -8,6 +8,9 @@ The project is built as a PostgreSQL-backed web application with a React fronten
 
 The Software Engineering mini-project documentation for Team 12 is available in [`src/docs/`](src/docs/).
 
+- **Jira project board:** [Campusride Jira](https://piyushshiv26.atlassian.net/jira/software/projects/CR/summary)
+- **Sprint execution report:** [`Campusride_Sprint_Execution_Report.pdf`](Campusride_Sprint_Execution_Report.pdf)
+
 - **Software Requirements Specification (SRS):** Requirements, project scope, and acceptance criteria.
 - **Software Architecture and Design (SAD):** System architecture, design diagrams, data model, and API design.
 - **Software Test Plan (STP):** Testing strategy, test cases, and verification criteria.
@@ -64,6 +67,7 @@ SE-mini-project/
 │   ├── backend/        API and integration tests
 │   └── frontend/       Vitest and React Testing Library tests
 ├── compose.yaml        Local PostgreSQL configuration
+├── Campusride_Sprint_Execution_Report.pdf
 ├── README.md
 └── LICENSE
 ```
@@ -266,7 +270,7 @@ cd src/backend
 npm test
 ```
 
-`npm test` runs the backend HTTP health and authentication-guard tests. These do not write to PostgreSQL.
+`npm test` runs the backend HTTP health/authentication-guard tests and production session-secret configuration tests. These do not write to PostgreSQL.
 
 ### Running Backend Integration Tests
 

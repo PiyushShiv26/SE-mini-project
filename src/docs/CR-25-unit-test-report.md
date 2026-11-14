@@ -1,9 +1,9 @@
 # CR-25: Unit Test Report
 
-**Run date:** 2026-11-12  
-**Branch:** `docs/CR-25-unit-test-report`  
-**Application revision tested:** `main` at `d78f82c`  
-**Environment:** Windows 11; Node.js v22.19.0; npm; frontend Vitest 5.0.3; jsdom; backend Node test runner
+**Run date:** 2026-11-14
+**Branch:** `chore/CR-31-final-evaluation-readiness`
+**Application revision tested:** CR-31 working tree based on `origin/main` at `efbb5f5`
+**Environment:** macOS; Node.js v22.19.0; npm; frontend Vitest 5.0.3; jsdom; backend Node test runner; PostgreSQL 16 Docker service
 
 ## Test approach
 
@@ -13,14 +13,17 @@ Frontend component and navigation behaviors were exercised with Vitest, React Te
 
 | Suite/check | Command (run from) | Result |
 | --- | --- | --- |
-| Frontend unit tests with coverage | `src/frontend`: `npm run test:coverage` | **Passed:** 1 test file, 16 tests |
-| Backend HTTP unit tests | `src/backend`: `npm test` | **Passed:** 2 tests, 0 skipped |
+| Frontend unit tests | `src/frontend`: `npm test` | **Passed:** 1 test file, 16 tests |
+| Backend HTTP/configuration unit tests | `src/backend`: `npm test` | **Passed:** 6 tests, 0 skipped |
+| Frontend coverage regeneration | `src/frontend`: `npm run test:coverage` | **Passed:** 16 tests; 82.12% statements, 86.57% branches, 70.73% functions, 93.61% lines |
 | Frontend lint | `src/frontend`: `npm run lint` | **Passed** |
 | Frontend production build | `src/frontend`: `npm run build` | **Passed**; Vite built 29 modules |
-| Backend PostgreSQL integration | `src/backend`: `npm run test:integration` | **Blocked locally:** the required `DATABASE_URL_TEST` was not set; the suite intentionally stopped before running tests |
-| System validation | `src/backend`: `npm run test:system` | **Not run locally:** it requires the dedicated PostgreSQL test database and `DATABASE_URL_TEST` |
+| Backend PostgreSQL integration | `src/backend`: `DATABASE_URL_TEST=... npm run test:integration` | **Passed:** 20 tests, 0 skipped against isolated `campus_rides_test` |
+| System validation | `src/backend`: `DATABASE_URL_TEST=... npm run test:system` | **Passed:** 1 connected frontend/API/database workflow |
+| Backend focused coverage | `src/backend`: `node --experimental-test-coverage --test ...` | **Passed:** 6 tests; 41.51% lines, 60.00% branches, 22.58% functions for `app.js` |
+| Performance probe | `src/backend`: `PERFORMANCE_CONCURRENCY=50 PERFORMANCE_ROUNDS=20 npm run test:performance` | **Passed:** 1,000 health requests, 0 failures, p95 4.47 ms |
 
-The frontend run recorded statement coverage 82.75%, branch coverage 86.69%, function coverage 71.90%, and line coverage 93.61%; see the separate CR-23 and CR-24 reports. The backend HTTP run reported 2 passed, 0 failed, 0 skipped. No executed test failed. The integration command's nonzero exit is an environment precondition failure, not a test assertion failure; it confirms that no database-backed test ran locally.
+No executed test failed. Coverage values are separated by frontend and backend scope; backend coverage is intentionally limited to the non-database unit run.
 
 ## Pull request CI
 
@@ -32,4 +35,4 @@ Install dependencies using `npm ci` in both `src/frontend` and `src/backend`. Ru
 
 ## Remaining issue
 
-- The local machine still lacks the dedicated PostgreSQL test database, so the database-backed suites are verified by CI rather than locally.
+- Full browser-matrix and automated accessibility tooling were not available in the local project dependencies; the connected system check exercised the Vite frontend through its HTTP proxy.

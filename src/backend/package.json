@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test ../../tests/backend/health.test.js",
+    "test": "node --test ../../tests/backend/health.test.js ../../tests/backend/config.test.js",
     "test:integration": "node --test ../../tests/backend/api.integration.test.js",
     "test:system": "node --test ../../tests/system/system-validation.test.js",
+    "test:performance": "node ../../tests/performance/health-load.mjs",
     "db:migrate": "node src/migrate.js",
     "db:seed": "node src/seed.js"
   },
