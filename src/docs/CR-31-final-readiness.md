@@ -27,12 +27,12 @@ The application currently includes registration and login, server-side sessions,
 
 The following remain intentionally unresolved or require separate evidence:
 
-- CSRF tokens are not implemented; same-site cookies and configured-origin CORS reduce exposure, but production deployment still requires an explicit CSRF/origin decision.
+- CSRF tokens are not implemented; state-changing requests now reject a present Origin that does not match the configured frontend origin, while same-site cookies and CORS provide additional browser-layer protection.
 - The session cookie is Secure only when `NODE_ENV=production`; HTTPS/proxy behavior has not been exercised in a production-like environment.
 - Route-ID validation is not consistent across every endpoint.
 - Ride cancellation is transactional, but accepted-seat reconciliation on a terminal cancelled ride is not separately asserted.
 - Messages are ride-level/shared with eligible participants, while some UI wording still describes a private conversation. Conversation rows can repeat for multiple accepted passengers and message reads are limited to the oldest 300 rows.
-- No current 50-user p95 performance result, browser matrix, accessibility review, restart/rollback evidence or rate-limit execution record is included here.
+- The reproducible health-endpoint performance probe passed 1,000 requests at 50 concurrent requests with p95 4.47 ms; this is endpoint-level evidence, not a full application load test. A browser matrix and automated accessibility tooling were not available in the local dependency set. Restart/rollback evidence and a production rate-limit execution record remain deployment evidence gaps.
 - Password changes, university-membership verification, payments, GPS/map routing and native mobile clients remain outside the stated release scope.
 
 These are documented as limitations rather than claimed as completed requirements.
@@ -46,12 +46,13 @@ Executed on the CR-31 branch:
 | `cd src/frontend && npm run lint` | Passed | ESLint completed without errors |
 | `cd src/frontend && npm test` | Passed | 16 frontend tests passed |
 | `cd src/frontend && npm run build` | Passed | Vite production build completed |
-| `cd src/backend && npm test` | Passed | 5 backend HTTP/configuration tests passed |
-| `cd src/backend && npm run test:integration` | Blocked | `DATABASE_URL_TEST` was not configured; no database tests ran |
-| `cd src/backend && npm run test:system` | Blocked | `DATABASE_URL_TEST` was not configured; no system tests ran |
+| `cd src/backend && npm test` | Passed | 6 backend HTTP/configuration tests passed |
+| `cd src/backend && DATABASE_URL_TEST=... npm run test:integration` | Passed | 20 PostgreSQL integration tests passed on isolated `campus_rides_test` |
+| `cd src/backend && DATABASE_URL_TEST=... npm run test:system` | Passed | 1 connected frontend/API/database workflow passed |
+| `cd src/backend && PERFORMANCE_CONCURRENCY=50 PERFORMANCE_ROUNDS=20 npm run test:performance` | Passed | 1,000 requests, 0 failures, p95 4.47 ms on `/api/health` |
 | `git diff --check` | Passed | No whitespace errors |
 
-The integration and system commands fail closed when their dedicated test database URL is missing. They must be rerun against a disposable database before final acceptance.
+The integration and system commands fail closed when their dedicated test database URL is missing. The final local run used Docker Desktop's disposable `campus_rides_test` database.
 
 ## Testing reports
 
@@ -62,7 +63,7 @@ The repository contains the four requested report artifacts:
 - `CR-23-code-coverage.md`
 - `CR-24-branch-coverage.md`
 
-The reports contain prior CI evidence and recorded frontend coverage. They should be refreshed after the final merge if faculty requires the final commit hash and current suite counts. No new coverage percentage is claimed by this document.
+The reports now contain current CR-31 execution evidence, including frontend and focused backend coverage, integration/system counts, and the performance probe result. Browser and automated accessibility limitations remain explicitly called out.
 
 ## CI and repository evidence
 
@@ -80,9 +81,9 @@ As of this branch, feature development is frozen for final evaluation. Only rele
 - [x] STP test cases TC-01 through TC-35 preserved.
 - [x] Frontend lint, tests and build executed.
 - [x] Backend HTTP/configuration tests executed.
-- [ ] PostgreSQL integration suite executed on `campus_rides_test`.
-- [ ] Connected system validation executed on `campus_rides_test`.
-- [ ] Performance, browser, accessibility, restart/rollback and production-security evidence collected.
+- [x] PostgreSQL integration suite executed on `campus_rides_test`.
+- [x] Connected system validation executed on `campus_rides_test`.
+- [ ] Browser, accessibility, restart/rollback and production-security deployment evidence collected (performance endpoint probe is complete).
 - [ ] Final branch merged to `main` after required review.
 
 **Implementation baseline:** `efbb5f5`

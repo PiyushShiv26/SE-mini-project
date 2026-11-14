@@ -1,8 +1,8 @@
 # CR-24: Branch Coverage Report
 
-**Run date:** 2026-11-12  
-**Branch:** `test/CR-24-branch-coverage`  
-**Revision under test:** working tree based on `main` at `d78f82c`  
+**Run date:** 2026-11-14
+**Branch:** `chore/CR-31-final-evaluation-readiness`
+**Revision under test:** CR-31 working tree after the Origin validation hardening
 **Runtime:** Node.js v22.19.0; Vitest 5.0.3; V8 coverage provider 5.0.3
 
 ## Method
@@ -20,8 +20,8 @@ The command runs the frontend unit suite and writes V8/Istanbul branch counters 
 
 | Measure | Covered | Total | Coverage |
 | --- | ---: | ---: | ---: |
-| Branch outcomes | 189 | 218 | 86.69% |
-| Uncovered branch outcomes | 29 | 218 | 13.31% |
+| Branch outcomes | 187 | 216 | 86.57% |
+| Uncovered branch outcomes | 29 | 216 | 13.43% |
 
 The run completed with **1 test file passed and 16 tests passed**. No tests were skipped. The percentage is generated from the same source and suite as CR-23.
 
@@ -46,4 +46,4 @@ Coverage outputs are ignored generated files and are not committed. The recorded
 
 ## CR-31 verification note
 
-On 14 November 2026, branch-coverage regeneration was attempted on `chore/CR-31-final-evaluation-readiness` but stopped before execution because the local `@vitest/coverage-v8` dependency was unavailable. The percentages above remain the latest recorded branch-coverage evidence; they are not a new CR-31 run.
+On 14 November 2026, the locked `@vitest/coverage-v8` dependency was installed with `npm ci` and branch coverage was regenerated successfully on the CR-31 branch. The changed source adds Origin-validation branches, so the totals differ slightly from the earlier CR-24 report.

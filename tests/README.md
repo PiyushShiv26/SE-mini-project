@@ -7,6 +7,7 @@
 - `tests/backend/config.test.js` — production session-secret validation and development fallback behavior.
 - `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, filtered ride search, dashboard consistency, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
 - `tests/system/system-validation.test.js` — starts the backend and Vite frontend together, verifies the frontend and `/api` proxy, then exercises a database-backed ride request, acceptance, dashboard, and messaging flow.
+- `tests/performance/health-load.mjs` — sends a reproducible configurable-concurrency probe to the health endpoint and reports average, p95 and maximum latency.
 
 No test is marked skipped. The database integration and system commands fail before executing tests if their test database URL is missing or does not name a database ending in `_test`.
 
@@ -61,6 +62,19 @@ npm run test:system
 Remove-Item Env:DATABASE_URL_TEST
 Remove-Item Env:NODE_ENV
 ```
+
+## Performance probe
+
+With the backend running locally, execute the documented 50-concurrent-user probe from `src\backend`:
+
+```powershell
+$env:PERFORMANCE_BASE_URL = 'http://127.0.0.1:3000'
+$env:PERFORMANCE_CONCURRENCY = '50'
+$env:PERFORMANCE_ROUNDS = '20'
+npm run test:performance
+```
+
+The CR-31 run completed 1,000 `/api/health` requests with 0 failures and a 4.47 ms p95. This is endpoint-level evidence and does not replace a full production load test across every workflow.
 
 ## CI
 

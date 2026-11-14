@@ -27,8 +27,15 @@ export function validateSessionSecret({ environment = process.env.NODE_ENV, secr
   return secret
 }
 const sessionSecret = validateSessionSecret()
+const allowedOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
 app.use(helmet())
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }))
+app.use(cors({ origin: allowedOrigin, credentials: true }))
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.get('origin') && req.get('origin') !== allowedOrigin) {
+    return res.status(403).json({ error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Request origin is not allowed.' } })
+  }
+  next()
+})
 app.use(express.json({ limit: '20kb' }))
 app.use(session({ name: 'campus.sid', secret: sessionSecret, resave: false, saveUninitialized: false, store: new PgStore({ pool, createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 24 * 7 } }))
 const authLimit = rateLimit({

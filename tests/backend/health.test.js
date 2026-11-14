@@ -36,3 +36,20 @@ test('private ride and dashboard APIs reject requests without a session', async 
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   }
 })
+
+test('state-changing requests reject untrusted browser origins', async () => {
+  const server = app.listen(0)
+  await new Promise((resolve) => server.once('listening', resolve))
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/auth/register`, {
+      method: 'POST',
+      headers: { origin: 'https://attacker.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Attacker', email: 'attacker@example.edu', password: 'password-123' }),
+    })
+    const body = await response.json()
+    assert.equal(response.status, 403)
+    assert.equal(body.error.code, 'ORIGIN_NOT_ALLOWED')
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  }
+})
