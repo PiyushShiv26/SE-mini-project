@@ -38,3 +38,7 @@ Coverage measures executed source locations; it does not establish that every be
 - Per-file HTML detail: `coverage/frontend/index.html`.
 
 The JSON and HTML reports are generated artifacts and are not committed; rerun the command to regenerate them. The values above are from the run recorded on this branch and should be refreshed if the tested source or suite changes.
+
+## CR-31 verification note
+
+On 14 November 2026, coverage regeneration was attempted on `chore/CR-31-final-evaluation-readiness` but stopped before execution because the local `@vitest/coverage-v8` dependency was unavailable. The percentages above remain the latest recorded coverage evidence; they are not a new CR-31 run.

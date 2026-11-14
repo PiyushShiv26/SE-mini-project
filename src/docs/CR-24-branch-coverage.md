@@ -43,3 +43,7 @@ These are coverage gaps, not confirmed functional defects. Several require contr
 - Machine-readable branch counters: `coverage/frontend/coverage-final.json`.
 
 Coverage outputs are ignored generated files and are not committed. The recorded counters came from a local run on this branch and should be regenerated after source or test changes.
+
+## CR-31 verification note
+
+On 14 November 2026, branch-coverage regeneration was attempted on `chore/CR-31-final-evaluation-readiness` but stopped before execution because the local `@vitest/coverage-v8` dependency was unavailable. The percentages above remain the latest recorded branch-coverage evidence; they are not a new CR-31 run.

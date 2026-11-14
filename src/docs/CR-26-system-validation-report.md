@@ -1,8 +1,8 @@
 # CR-26: System Validation Report
 
-**Run date:** 2026-11-12  
-**Branch:** `test/CR-26-system-validation-report`  
-**Build under validation:** `main` at `d78f82c`  
+**Run date:** 2026-11-14
+**Branch:** `chore/CR-31-final-evaluation-readiness`
+**Build under validation:** CR-31 working tree based on `origin/main` at `efbb5f5`
 **Plan:** `src/docs/Team12_Campus_RideShare_STP.docx`, test procedures TC-01, TC-04, TC-07, TC-08, TC-10, TC-11, and TC-15  
 **Local environment:** Windows 11; Node.js v22.19.0
 
@@ -24,7 +24,7 @@ The STP calls for system testing of the connected frontend, Express API, session
 | TC-11 / FR-11 | Participant sends a message; the other participant can read it | **Passed in CI:** the driver retrieved the passenger's message; integration suite also passed messaging authorization cases. | Pass |
 | TC-15 / FR-15 | Health endpoint returns 200 and `status: ok`; frontend proxy responds with expected CORS credentials | **Passed in CI:** health and proxy/CORS assertions passed. The integration suite also passed the health and OpenAPI metadata test. | Pass |
 
-Local `npm run test:system` exited before test registration because `DATABASE_URL_TEST` was not configured. CI supplied its isolated database and passed the system scenario. [Run 43159770736](https://github.com/PiyushShiv26/SE-mini-project/actions/runs/43159770736) completed successfully: frontend 16/16, backend HTTP 2/2, PostgreSQL integration 20/20, and system workflow 1/1; all 12 CI steps passed.
+The CR-31 local `npm run test:system` exited before test registration because `DATABASE_URL_TEST` was not configured. The historical CI run supplied its isolated database and passed the earlier system scenario. [Run 43159770736](https://github.com/PiyushShiv26/SE-mini-project/actions/runs/43159770736) completed successfully for that earlier baseline: frontend 16/16, backend HTTP 2/2, PostgreSQL integration 20/20, and system workflow 1/1. It is not claimed as execution evidence for the CR-31 commit.
 
 ## Defects and blockers
 

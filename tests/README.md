@@ -4,10 +4,11 @@
 
 - `tests/frontend/App.test.jsx` — public landing/authentication screens, successful registration and login, duplicate registration, password confirmation, browser back/forward navigation, and ride creation request payload.
 - `tests/backend/health.test.js` — HTTP health response and protected-route authentication guards. These run without database writes.
+- `tests/backend/config.test.js` — production session-secret validation and development fallback behavior.
 - `tests/backend/api.integration.test.js` — PostgreSQL-backed registration/login, duplicate and invalid credentials, normalized email, password hashing, session rotation/logout, protected endpoint authorization, profile, filtered ride search, dashboard consistency, rides, bookings, seat-capacity concurrency, cancellation, messaging, history, and ratings.
 - `tests/system/system-validation.test.js` — starts the backend and Vite frontend together, verifies the frontend and `/api` proxy, then exercises a database-backed ride request, acceptance, dashboard, and messaging flow.
 
-No test is marked skipped. The database integration command fails before executing tests if its test database URL is missing or does not name a database ending in `_test`.
+No test is marked skipped. The database integration and system commands fail before executing tests if their test database URL is missing or does not name a database ending in `_test`.
 
 ## Frontend checks
 

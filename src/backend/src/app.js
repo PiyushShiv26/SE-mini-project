@@ -12,10 +12,25 @@ if (process.env.NODE_ENV === 'test' && !databaseUrl) throw new Error('DATABASE_U
 export const pool = new Pool({ connectionString: databaseUrl })
 const app = express()
 const PgStore = pgSession(session)
+const developmentSessionSecrets = new Set([
+  'dev-only-change-this-secret',
+  'change-me',
+  'change-me-in-production',
+  'development-secret',
+  'your-secret-here',
+])
+export function validateSessionSecret({ environment = process.env.NODE_ENV, secret = process.env.SESSION_SECRET } = {}) {
+  if (environment !== 'production') return secret || 'dev-only-change-this-secret'
+  if (!secret || secret.length < 32 || developmentSessionSecrets.has(secret)) {
+    throw new Error('SESSION_SECRET must be a strong, non-default value in production.')
+  }
+  return secret
+}
+const sessionSecret = validateSessionSecret()
 app.use(helmet())
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }))
 app.use(express.json({ limit: '20kb' }))
-app.use(session({ name: 'campus.sid', secret: process.env.SESSION_SECRET || 'dev-only-change-this-secret', resave: false, saveUninitialized: false, store: new PgStore({ pool, createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 24 * 7 } }))
+app.use(session({ name: 'campus.sid', secret: sessionSecret, resave: false, saveUninitialized: false, store: new PgStore({ pool, createTableIfMissing: true }), cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 24 * 7 } }))
 const authLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,

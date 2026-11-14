@@ -266,7 +266,7 @@ cd src/backend
 npm test
 ```
 
-`npm test` runs the backend HTTP health and authentication-guard tests. These do not write to PostgreSQL.
+`npm test` runs the backend HTTP health/authentication-guard tests and production session-secret configuration tests. These do not write to PostgreSQL.
 
 ### Running Backend Integration Tests
 
