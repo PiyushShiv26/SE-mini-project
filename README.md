@@ -6,7 +6,7 @@ The project is built as a PostgreSQL-backed web application with a React fronten
 
 ## Coursework Documentation
 
-The Software Engineering mini-project documentation for Team 12 is available in [`src/docs/`](src/docs/).
+The Software Engineering mini-project documentation for Team 12 is available in [`src/docs/`](src/docs/). 
 
 - **Jira project board:** [Campusride Jira](https://piyushshiv26.atlassian.net/jira/software/projects/CR/summary)
 - **Sprint execution report:** [`Campusride_Sprint_Execution_Report.pdf`](Campusride_Sprint_Execution_Report.pdf)
